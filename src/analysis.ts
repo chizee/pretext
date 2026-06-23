@@ -26,13 +26,7 @@ export type MergedSegmentation = {
   starts: number[]
 }
 
-export type AnalysisChunk = {
-  startSegmentIndex: number
-  endSegmentIndex: number
-  consumedEndSegmentIndex: number
-}
-
-export type TextAnalysis = { normalized: string, chunks: AnalysisChunk[] } & MergedSegmentation
+export type TextAnalysis = { normalized: string } & MergedSegmentation
 
 export type AnalysisProfile = {
   carryCJKAfterClosingQuote: boolean
@@ -1286,41 +1280,6 @@ function buildMergedSegmentation(
   return withMergedUrls
 }
 
-function compileAnalysisChunks(segmentation: MergedSegmentation, whiteSpaceProfile: WhiteSpaceProfile): AnalysisChunk[] {
-  if (segmentation.len === 0) return []
-  if (!whiteSpaceProfile.preserveHardBreaks) {
-    return [{
-      startSegmentIndex: 0,
-      endSegmentIndex: segmentation.len,
-      consumedEndSegmentIndex: segmentation.len,
-    }]
-  }
-
-  const chunks: AnalysisChunk[] = []
-  let startSegmentIndex = 0
-
-  for (let i = 0; i < segmentation.len; i++) {
-    if (segmentation.kinds[i] !== 'hard-break') continue
-
-    chunks.push({
-      startSegmentIndex,
-      endSegmentIndex: i,
-      consumedEndSegmentIndex: i + 1,
-    })
-    startSegmentIndex = i + 1
-  }
-
-  if (startSegmentIndex < segmentation.len) {
-    chunks.push({
-      startSegmentIndex,
-      endSegmentIndex: segmentation.len,
-      consumedEndSegmentIndex: segmentation.len,
-    })
-  }
-
-  return chunks
-}
-
 function mergeKeepAllTextSegments(
   normalized: string,
   segmentation: MergedSegmentation,
@@ -1422,7 +1381,6 @@ export function analyzeText(
   if (normalized.length === 0) {
     return {
       normalized,
-      chunks: [],
       len: 0,
       texts: [],
       isWordLike: [],
@@ -1436,7 +1394,6 @@ export function analyzeText(
     : mergedSegmentation
   return {
     normalized,
-    chunks: compileAnalysisChunks(segmentation, whiteSpaceProfile),
     ...segmentation,
   }
 }
