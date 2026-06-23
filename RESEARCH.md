@@ -167,6 +167,43 @@ What did **not** change:
 
 That remains the right center of gravity for the project.
 
+## Safari/macOS shim audit (Safari 26.4)
+
+The compatibility profile had previously been validated through Safari 26.3.1.
+We re-ran its active decisions on Safari 26.4 against the full accuracy sweep,
+the focused `keep-all`, `pre-wrap`, symbol-run, and letter-spacing oracles, and
+the maintained long-form corpus sweep.
+
+What still earns its place:
+- Safari's `1/64px` line-fit tolerance. Using the shared `0.005px` tolerance
+  reintroduced one `18px Verdana` Arabic/Latin mismatch in the `7680`-case
+  accuracy sweep.
+- Safari's `keep-all` punctuation policy. Using the other engines' policy made
+  `foo。bar日本語` five lines instead of Safari's four while the controls stayed
+  stable.
+- Safari's prefix-width fitting for overlong shaped runs. The maintained
+  integer-width sweeps did not distinguish it, but a disposable `2564`-case
+  quarter-pixel kerning/ligature sweep produced `307` raw-height misses with
+  prefix fitting versus `1018` with isolated grapheme sums.
+
+What was retired:
+- `preferEarlySoftHyphenBreak`. The later strict soft-hyphen fix already checks
+  the same pending SHY boundary unconditionally, so both old Safari-only
+  branches had become dead duplicates. Removing the profile field and branches
+  left the focused soft-hyphen oracle, every line API invariant, the full
+  accuracy sweep, and the long-form corpus sweep unchanged.
+
+Two nearby macOS/Safari conclusions also held:
+- Safari `Range` extraction is still diagnostic-sensitive for several wrapping
+  classes; the span cross-check remains necessary before treating those as
+  engine mismatches.
+- `system-ui` remains a macOS cross-browser caveat rather than a Safari-specific
+  shim. Emoji correction remains capability-detected; Safari normally needs no
+  correction.
+
+Safari Technology Preview was not installed on the audit machine, so these
+results cover the shipping Safari 26.4 engine only.
+
 ## Arabic frontier
 
 Arabic took several passes, but the pattern is clearer now.
