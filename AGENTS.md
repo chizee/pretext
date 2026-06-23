@@ -34,6 +34,7 @@ See `DEVELOPMENT.md` for the current command surface and packaging/release check
 - `benchmarks/chrome.json` / `benchmarks/safari.json` — checked-in current benchmark snapshots
 - `corpora/dashboard.json` — machine-readable long-form corpus dashboard derived from the corpus snapshots and notes
 - `corpora/chrome-step10.json` / `corpora/safari-step10.json` — checked-in browser `step=10` corpus sweep snapshots
+- `PLATFORM_BUGS.md` — current browser/OS bug ledger, issue links, workarounds, and investigated non-bugs
 - `pages/diagnostic-utils.ts` — shared grapheme-safe diagnostic helpers used by the browser check pages
 - `scripts/pre-wrap-check.ts` — small permanent browser-oracle sweep for the non-default `{ whiteSpace: 'pre-wrap' }` mode
 - `pages/demos/index.html` — public static demo landing page used as the GitHub Pages site root

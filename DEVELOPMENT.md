@@ -86,6 +86,7 @@ Use these for the current checked-in picture:
 - [corpora/STATUS.md](corpora/STATUS.md) — short pointer doc for long-form corpora
 - [corpora/dashboard.json](corpora/dashboard.json) — machine-readable corpus dashboard
 - [corpora/chrome-step10.json](corpora/chrome-step10.json), [corpora/safari-step10.json](corpora/safari-step10.json) — checked-in browser `step=10` corpus sweep snapshots
+- [PLATFORM_BUGS.md](PLATFORM_BUGS.md) — current browser/OS issue and workaround ledger
 - [RESEARCH.md](RESEARCH.md) — the exploration log and the durable conclusions behind the current model
 
 ## Deep Profiling
