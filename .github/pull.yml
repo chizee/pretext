@@ -1,0 +1,6 @@
+version: "1"
+rules:
+  - base: main
+    upstream: chenglou:main
+    mergeMethod: hardreset
+    mergeUnstable: true
