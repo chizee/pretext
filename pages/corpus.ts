@@ -13,13 +13,14 @@ import {
 } from './diagnostic-utils.ts'
 import { clearNavigationReport, publishNavigationPhase, publishNavigationReport } from './report-utils.ts'
 import { corpusSources, corpusTexts } from '../tests/wrapping/fixtures/corpora.ts'
+import { createBrowserEnvironmentGuard, type BrowserEnvironmentReport } from '../shared/browser-environment.ts'
 
 type CorpusMeta = (typeof corpusSources)[number]
 
 type CorpusReport = {
   status: 'ready' | 'error'
   requestId?: string
-  environment?: EnvironmentFingerprint
+  environment?: BrowserEnvironmentReport
   corpusId?: string
   sliceStart?: number | null
   sliceEnd?: number | null
@@ -136,25 +137,7 @@ type DiagnosticLine = {
 
 const rangeProbeScriptRe = /[\u0E00-\u0E7F\u0E80-\u0EFF\u1000-\u109F\u1780-\u17FF]/u
 
-type EnvironmentFingerprint = {
-  userAgent: string
-  devicePixelRatio: number
-  viewport: {
-    innerWidth: number
-    innerHeight: number
-    outerWidth: number
-    outerHeight: number
-    visualViewportScale: number | null
-  }
-  screen: {
-    width: number
-    height: number
-    availWidth: number
-    availHeight: number
-    colorDepth: number
-    pixelDepth: number
-  }
-}
+let environmentGuard: ReturnType<typeof createBrowserEnvironmentGuard> | undefined
 
 declare global {
   interface Window {
@@ -256,26 +239,10 @@ function toNavigationReport(report: CorpusReport): CorpusReport {
   return navigationReport
 }
 
-function getEnvironmentFingerprint(): EnvironmentFingerprint {
-  return {
-    userAgent: navigator.userAgent,
-    devicePixelRatio: window.devicePixelRatio,
-    viewport: {
-      innerWidth: window.innerWidth,
-      innerHeight: window.innerHeight,
-      outerWidth: window.outerWidth,
-      outerHeight: window.outerHeight,
-      visualViewportScale: window.visualViewport?.scale ?? null,
-    },
-    screen: {
-      width: window.screen.width,
-      height: window.screen.height,
-      availWidth: window.screen.availWidth,
-      availHeight: window.screen.availHeight,
-      colorDepth: window.screen.colorDepth,
-      pixelDepth: window.screen.pixelDepth,
-    },
-  }
+function getEnvironmentFingerprint(): BrowserEnvironmentReport {
+  if (environmentGuard === undefined) throw new Error('Corpus measurements require an environment guard.')
+  environmentGuard.assertStable()
+  return environmentGuard.report()
 }
 
 function buildFont(meta: CorpusMeta): string {
@@ -601,7 +568,7 @@ function setReport(report: CorpusReport): void {
 
 function setError(message: string): void {
   stats.textContent = `Error: ${message}`
-  setReport(withRequestId({ status: 'error', message }))
+  setReport(withRequestId({ status: 'error', message, ...(environmentGuard === undefined ? {} : { environment: environmentGuard.report() }) }))
 }
 
 function updateTitle(meta: CorpusMeta): void {
@@ -818,6 +785,8 @@ function measureWidth(
   if (currentMeta === null || currentPrepared === null) {
     return null
   }
+  if (environmentGuard === undefined) throw new Error('Prepared corpus has no environment guard.')
+  environmentGuard.assertStable()
 
   const font = buildFont(currentMeta)
   const lineHeight = getLineHeight(currentMeta)
@@ -952,7 +921,9 @@ function runSweep(widths: number[]): void {
 }
 
 function setWidth(width: number): void {
-  measureWidth(width)
+  try { measureWidth(width) } catch (error) {
+    setError(error instanceof Error ? error.message : String(error))
+  }
 }
 
 function populateSelect(selectedId: string): void {
@@ -982,6 +953,9 @@ async function loadCorpus(meta: CorpusMeta): Promise<void> {
   if ('fonts' in document) {
     await document.fonts.ready
   }
+  environmentGuard?.dispose()
+  environmentGuard = createBrowserEnvironmentGuard('correctness')
+  environmentGuard.assertStable()
 
   publishNavigationPhase('measuring', requestId)
   const fullPrepared = prepareWithSegments(rawText, font)

@@ -1,3 +1,4 @@
+import { environmentFailure } from '../../shared/browser-environment.ts'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { TEXTS, SIZES, WIDTHS, ACCURACY_FONTS, LETTER_SPACING_ORACLE_CASES } from '../../src/test-data.ts'
@@ -59,7 +60,21 @@ export function createSnapshots() {
       }
     },
     addEnvironment(browser: BrowserKind, direction: 'ltr' | 'rtl', environment: BrowserEnvironment): void {
-      captures[browser].environments.push({ direction, ...environment })
+      const failure = environmentFailure(environment.measurement, 'correctness')
+      if (failure !== null) throw new Error(`Invalid ${browser} snapshot: ${failure}`)
+      const capture = captures[browser]
+      for (const previous of capture.environments) {
+        if (previous.measurement.userAgent !== environment.measurement.userAgent ||
+            previous.measurement.start.dpr !== environment.measurement.start.dpr ||
+            previous.measurement.start.visualViewportScale !== environment.measurement.start.visualViewportScale) {
+          throw new Error(`Incompatible ${browser} snapshot environments; rerun on one display scale`)
+        }
+        const sameContext = previous.context.kind === 'fixtures'
+          ? environment.context.kind === 'fixtures'
+          : environment.context.kind === 'installed' && previous.context.lang === environment.context.lang
+        if (previous.direction === direction && sameContext) throw new Error(`Duplicate ${browser} snapshot context`)
+      }
+      capture.environments.push({ direction, ...environment })
     },
     async write(root: string, evidence: { suiteHash: string; source: { revision: string | null; files: Record<string, string> }; output: string }): Promise<void> {
       const generatedAt = new Date().toISOString()

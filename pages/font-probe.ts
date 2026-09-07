@@ -1,5 +1,6 @@
 import { clearCache, layoutWithLines, prepareWithSegments } from '../src/layout.js'
 import { publishNavigationPhase, publishNavigationReport } from './report-utils.ts'
+import { createBrowserEnvironmentGuard, type BrowserEnvironmentReport } from '../shared/browser-environment.ts'
 
 type FontCase = { label: string, text: string, font: string, width: number, lang: string }
 type Prefix = { end: number, dom: number, canvas: number, isolated: number, domInContext: number, canvasLookahead: number }
@@ -19,8 +20,8 @@ type FontRow = FontCase & {
   widths: WidthProbe[]
 }
 export type FontProbeReport = { requestId: string } & (
-  | { status: 'ready', environment: { userAgent: string, devicePixelRatio: number }, rows: FontRow[] }
-  | { status: 'error', message: string }
+  | { status: 'ready', environment: BrowserEnvironmentReport, rows: FontRow[] }
+  | { status: 'error', message: string, environment?: BrowserEnvironmentReport }
 )
 
 const params = new URLSearchParams(location.search)
@@ -105,8 +106,9 @@ function lookaheadLines(prefixes: Prefix[], width: number): number[] {
   return lengths
 }
 
-async function probe(test: FontCase): Promise<FontRow> {
+async function probe(test: FontCase, guard: ReturnType<typeof createBrowserEnvironmentGuard>): Promise<FontRow> {
   const faces = await document.fonts.load(test.font, test.text)
+  guard.assertStable()
   if (test.font.includes('Shantell') && faces.length === 0) throw new Error('The requested Shantell Sans face was not loaded; fallback results are invalid.')
   const sample = document.createElement('div')
   styleText(sample, test)
@@ -175,13 +177,18 @@ async function publish(report: FontProbeReport): Promise<void> {
   } else publishNavigationReport(report)
 }
 
+let environmentGuard: ReturnType<typeof createBrowserEnvironmentGuard> | undefined
 try {
   publishNavigationPhase('loading', requestId)
+  await Promise.all(cases.map(test => document.fonts.load(test.font, test.text)))
   await document.fonts.ready
+  environmentGuard = createBrowserEnvironmentGuard('correctness')
+  environmentGuard.assertStable()
   publishNavigationPhase('measuring', requestId)
   const rows: FontRow[] = []
   for (const test of cases) {
-    const row = await probe(test)
+    const row = await probe(test, environmentGuard)
+    environmentGuard.assertStable()
     rows.push(row)
     const tr = document.createElement('tr')
     for (const value of [row.label, `${row.domLines.map(line => line.length).join('/')} · ${row.pretextLines.map(line => line.length).join('/')}`, `${row.domWidth.toFixed(2)} / ${row.canvasWidth.toFixed(2)}`, row.isolatedWidth.toFixed(2)]) {
@@ -190,9 +197,12 @@ try {
     document.querySelector('#rows')!.append(tr)
   }
   status.textContent = `${rows.length} cases measured. Boundary probes compare isolated prefixes, paragraph-context advances and native lines. These are diagnostics for repeated-x runs, not a word-breaking implementation.`
-  await publish({ status: 'ready', requestId, environment: { userAgent: navigator.userAgent, devicePixelRatio }, rows })
+  environmentGuard.assertStable()
+  await publish({ status: 'ready', requestId, environment: environmentGuard.report(), rows })
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error)
   status.textContent = message
-  await publish({ status: 'error', requestId, message })
+  await publish({ status: 'error', requestId, message, ...(environmentGuard === undefined ? {} : { environment: environmentGuard.report() }) })
+} finally {
+  environmentGuard?.dispose()
 }

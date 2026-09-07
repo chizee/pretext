@@ -28,7 +28,7 @@ const lock = await acquireBrowserAutomationLock(browser)
 let session: BrowserSession | null = null
 let serverProcess: ChildProcess | null = null
 try {
-  session = createBrowserSession(browser, { foreground: false })
+  session = createBrowserSession(browser, { foreground: false, headless: false })
   const server = await ensurePageServer(await getAvailablePort(), '/justification-check', process.cwd())
   serverProcess = server.process
   const requestId = `${browser}-${Date.now()}`
@@ -44,11 +44,11 @@ try {
     for (const failure of report.failures.slice(0, 10)) console.log(JSON.stringify(failure))
     if (report.failures.length > 0) process.exitCode = 1
   } finally {
-    reportServer.close()
+    await reportServer.close()
   }
 } finally {
   try {
-    session?.close()
+    await session?.close()
   } finally {
     serverProcess?.kill()
     lock.release()

@@ -19,7 +19,7 @@ function sameBreaks(actual: number[], expected: number[]): boolean {
 }
 
 try {
-  session = createBrowserSession(browser)
+  session = createBrowserSession(browser, { foreground: false, headless: false })
   pageServer = await ensurePageServer(await getAvailablePort(), '/font-probe', process.cwd())
   const requestId = `font-probe-${Date.now()}`
   const reports = await startPostedReportServer<FontProbeReport>(requestId)
@@ -42,10 +42,10 @@ try {
       lookaheadBoundaryMatches: row.widths.filter(probe => sameBreaks(probe.dom, probe.lookahead)).length,
     }))
     console.log(JSON.stringify({ environment: report.environment, rows }, null, 2))
-  } finally { reports.close() }
+  } finally { await reports.close() }
 } finally {
   try {
-    session?.close()
+    await session?.close()
   } finally {
     pageServer?.process?.kill()
     lock.release()

@@ -1,7 +1,8 @@
 import { generateCases } from './cases.ts'
 import { samePreparation, type ContractFailure, type Prediction } from './contracts.ts'
 import { assess, observeNative } from './observe.ts'
-import type { BrowserConfig, BrowserContext, BrowserFailure, BrowserReport, CaseResult, FontFixture, WrappingCase } from './types.ts'
+import { createBrowserEnvironmentGuard } from '../../shared/browser-environment.ts'
+import type { BrowserCompletion, BrowserConfig, BrowserContext, BrowserFailure, BrowserProgress, BrowserReport, BrowserRows, CaseResult, FontFixture, WrappingCase } from './types.ts'
 
 type Variant = {
   name: string
@@ -71,11 +72,18 @@ async function loadFonts(fixtures: FontFixture[]): Promise<void> {
 export async function runBrowser(variants: Variant[]): Promise<void> {
   const progress = document.createElement('pre')
   document.body.append(progress)
+  const requestId = new URL(location.href).searchParams.get('request')
+  if (requestId === null || requestId.length === 0) {
+    progress.textContent = 'A measurement request ID is required.'
+    return
+  }
+  let guard: ReturnType<typeof createBrowserEnvironmentGuard> | undefined
   try {
-    const response = await fetch('/config')
+    const response = await fetch(`/config?request=${encodeURIComponent(requestId)}`)
     if (!response.ok) throw new Error(`Configuration HTTP ${response.status}`)
     const rawConfig: unknown = await response.json()
     const config = parseConfig(rawConfig)
+    if (config.requestId !== requestId) throw new Error('Configuration belongs to a different measurement request.')
     // The engine profile may inspect document direction during preparation.
     // Each direction therefore runs on a fresh page before any API is called.
     document.documentElement.dir = config.direction
@@ -83,6 +91,8 @@ export async function runBrowser(variants: Variant[]): Promise<void> {
     if (config.context.kind === 'fixtures') document.documentElement.removeAttribute('lang')
     else document.documentElement.lang = config.context.lang
     await loadFonts(fonts)
+    guard = createBrowserEnvironmentGuard('correctness')
+    guard.assertStable()
     const canvas = document.createElement('canvas')
     const context = canvas.getContext('2d')
     if (context === null) throw new Error('Canvas 2D is unavailable.')
@@ -107,6 +117,7 @@ export async function runBrowser(variants: Variant[]): Promise<void> {
     if (selected.length === 0 && config.caseId === null && config.family === null) throw new Error('The selected schedule unexpectedly contains no cases.')
     const richContracts: BrowserReport['richContracts'] = []
     const batch: CaseResult[] = []
+    let sequence = 0
     const richContexts: Array<{ font: string; letterSpacing: number; includeStructure: boolean }> = []
     for (const input of config.context.kind === 'fixtures' ? selected : []) {
       if (input.detail === 'height') continue
@@ -114,6 +125,7 @@ export async function runBrowser(variants: Variant[]): Promise<void> {
       if (!richContexts.some(context => context.font === input.font && context.letterSpacing === input.letterSpacing)) richContexts.push({ font: input.font, letterSpacing: input.letterSpacing, includeStructure: false })
     }
     for (let index = 0; index < inputs.length;) {
+      guard.assertStable()
       const first = inputs[index]!
       let end = index + 1
       while (end < inputs.length && samePreparation(first, inputs[end]!)) end++
@@ -144,31 +156,44 @@ export async function runBrowser(variants: Variant[]): Promise<void> {
         }
         batch.push({ input, native, predictions })
         if (batch.length === 128 || index === inputs.length - 1) {
-          await post('/rows', batch)
+          guard.assertStable()
+          await post('/rows', { requestId, sequence: sequence++, rows: batch } satisfies BrowserRows)
           batch.length = 0
           progress.textContent = `${index + 1}/${inputs.length}`
-          await post('/progress', { completed: index + 1, total: inputs.length })
+          await post('/progress', { requestId, completed: index + 1, total: inputs.length } satisfies BrowserProgress)
           await new Promise<void>(resolve => setTimeout(resolve, 0))
+          guard.assertStable()
         }
       }
     }
     for (const { font, letterSpacing, includeStructure } of richContexts) {
+      guard.assertStable()
       for (const variant of variants) richContracts.push({ name: variant.name, font, letterSpacing, ...variant.checkRichContracts({ font, letterSpacing }, includeStructure) })
     }
+    // Let display events from the final synchronous contract group reach the guard.
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+    guard.assertStable()
+    const measurement = guard.report()
     const report: BrowserReport = {
       status: 'ready', observerVersion: 2, contexts, rowCount: inputs.length, richContracts,
       environment: {
+        measurement,
         context: config.context,
-        userAgent: navigator.userAgent, dpr: devicePixelRatio,
+        userAgent: measurement.userAgent, dpr: measurement.end.dpr,
         locale: new Intl.Segmenter().resolvedOptions().locale,
-        visibility: document.visibilityState, focused: document.hasFocus(), fonts,
+        visibility: measurement.end.visibility, focused: measurement.end.focused, fonts,
       },
     }
     progress.textContent = `Completed ${inputs.length} cases.`
-    await post('/report', report)
+    await post('/report', { requestId, url: location.href, report } satisfies BrowserCompletion)
   } catch (error) {
-    const report: BrowserFailure = { status: 'error', message: error instanceof Error ? error.stack ?? error.message : String(error) }
+    const report: BrowserFailure = {
+      status: 'error', message: error instanceof Error ? error.stack ?? error.message : String(error),
+      ...(guard === undefined ? {} : { measurement: guard.report() }),
+    }
     progress.textContent = report.message
-    await post('/report', report)
+    await post('/report', { requestId, url: location.href, report } satisfies BrowserCompletion)
+  } finally {
+    guard?.dispose()
   }
 }

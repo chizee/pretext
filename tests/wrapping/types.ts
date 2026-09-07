@@ -1,4 +1,5 @@
 import type { ContractFailure, Prediction } from './contracts.ts'
+import type { BrowserEnvironmentReport } from '../../shared/browser-environment.ts'
 
 export type BrowserKind = 'chrome' | 'safari' | 'firefox'
 export type BrowserContext = { kind: 'fixtures' } | { kind: 'installed'; lang: string }
@@ -110,6 +111,7 @@ export type BrowserConfig = {
 }
 
 export type BrowserEnvironment = {
+  measurement: BrowserEnvironmentReport
   context: BrowserContext
   userAgent: string
   dpr: number
@@ -128,4 +130,10 @@ export type BrowserReport = {
   richContracts: { name: string; font: string; letterSpacing: number; failures: ContractFailure[]; passedContracts: string[] }[]
 }
 
-export type BrowserFailure = { status: 'error'; message: string }
+export type BrowserFailure = { status: 'error'; message: string; measurement?: BrowserEnvironmentReport }
+
+// Every page context has its own request. Older tabs cannot contribute rows or
+// finish a later context, even when they still know the local server address.
+export type BrowserRows = { requestId: string; sequence: number; rows: CaseResult[] }
+export type BrowserProgress = { requestId: string; completed: number; total: number }
+export type BrowserCompletion = { requestId: string; url: string; report: BrowserReport | BrowserFailure }

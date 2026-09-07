@@ -8,6 +8,65 @@ opposites discovered during review.
 [README.md](README.md) explains the runner; [INVENTORY.md](INVENTORY.md) records
 coverage, provenance and research protocols outside its scope.
 
+## Browser environment and ownership
+
+The September 6 harness cleanup leaves library sources, cases, assertions,
+tolerances and the baseline pin unchanged. The final ordinary capture passes all
+maintained/preservation gates: 33,622 inputs, nine numeric profiles, zero new
+regressions, required failures or execution errors. All 44 document contexts have
+matching requested/observed URLs, DPR 2 and no recorded environment changes.
+The seven accuracy/corpus snapshot result payloads are unchanged; only capture
+provenance/environment metadata changes. This is not a full-schedule rerun.
+
+The first guarded capture also exactly reproduces the previous investigation's
+11,240 Chrome and 11,172 Safari inputs, complete native observations and main
+predictions. No tolerance or geometry stripping was used in that comparison.
+This supports retaining those observations; it cannot certify every older run.
+
+The browser guard covers preparation through final event delivery. Native Chrome
+fault checks reject a DPR round trip and a blur/focus round trip even when the
+ending state matches the start, while steady background correctness is accepted.
+Chrome's injected resolution transition delivered only the return-to-match event;
+the fixed initial-resolution query retains that evidence. Safari ownership tests
+reject extra tabs or navigation elsewhere and preserve replacement/user-added
+content during cleanup. Transport tests reject stale IDs, duplicate/out-of-order
+batches, wrong URLs, incomplete reports and nonfinite measurement evidence.
+
+Both benchmark snapshots now retain three complete native foreground runs with
+matching environments and no observed changes. Chrome used the 2560×1440 CSS
+screen and Safari the 1440×2560 CSS screen, both at DPR 2. Hardware inspection
+reported 120 Hz and 60 Hz respectively. These are refreshed reference captures,
+not proof of a library performance change relative to older environment-free
+snapshots. Native and portable correctness, corpus and probe smoke checks remain
+separate from the foreground benchmark protocol.
+
+The local evidence is under `.artifacts/harness-audit/`; `wrapping-final` has suite
+hash `a1e246d1efef63a1499310f51d1c61744a3c6a8e2938ed896c6993c1ced92b66`.
+The audit retained the historical evidence ledgers and valid regression cohorts;
+no case pruning was justified. The interrupted #210/#211 experiments resume with
+new captures using this guard, without rewriting their frozen earlier evidence.
+
+Publication was separately validated on `f37d482`, excluding the older local
+library/demo/README edits. All 204 tests (1,211 assertions), TypeScript/lint/Knip
+and the demo-site build pass. A fresh ordinary capture again passes all gates
+across 33,622 inputs and nine numeric profiles, with the same suite hash above.
+Its refreshed accuracy/corpus snapshots identify `f37d482` and its exact source
+files. Chrome and Safari benchmarks were also refreshed from this publication
+checkout: three foreground runs each, with matching environments and no recorded
+changes. Both stayed at DPR 2 on the same respective screen sizes listed above.
+The publication capture is under
+`/private/tmp/pretext-harness-publication-wrapping-20260907`; it does not replace
+the earlier local audit evidence.
+
+A separate native Chrome probe exercised the built-in 1512×982 screen and both
+external screens (2560×1440 and 1440×2560), all at DPR 2. Stable correctness and
+benchmark guards accepted each display. The three Latin/Arabic/emoji Canvas and
+DOM witnesses were identical across displays. Moving the owned window from the
+horizontal external screen to the built-in screen was observed and rejected by
+benchmark mode, while same-scale correctness remained valid. This is a bounded
+physical-display smoke check, not a full corpus run on each monitor. Evidence is
+under `/private/tmp/pretext-harness-publication-displays-20260907`.
+
 ## Extraction-stage observation
 
 This follow-up changes test instrumentation only; all library sources are

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-09-06T11:09:43.297Z",
-  "suiteHash": "0f51943935e2ee005c52dfb58236dc42e0ce23b303c631c9cec6535e70a42d51",
+  "generatedAt": "2026-09-07T04:03:47.867Z",
+  "suiteHash": "a1e246d1efef63a1499310f51d1c61744a3c6a8e2938ed896c6993c1ced92b66",
   "source": {
-    "revision": "d5810efd14aa9ba9fd2b10b990abb58bbf2faab0",
+    "revision": "f37d48217a826d4cb44b9900d0a03f922d1cf14b",
     "files": {
       "analysis.ts": "b129a4890a7d171f5ae112c5473f941fab38376c178f2b23a3da7f2878dba647",
       "bidi.ts": "c5962b925739049f7d03d8b6f2144a0f84d9e6b26f9900bc0d3f0b92dc20eb51",
@@ -18,6 +18,46 @@
   "environments": [
     {
       "direction": "ltr",
+      "measurement": {
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:152.0) Gecko/20100101 Firefox/152.0",
+        "start": {
+          "dpr": 2,
+          "visualViewportScale": 1,
+          "innerWidth": 1280,
+          "innerHeight": 956,
+          "outerWidth": 1280,
+          "outerHeight": 1040,
+          "screenX": 4,
+          "screenY": 30,
+          "screenWidth": 2560,
+          "screenHeight": 1440,
+          "screenAvailWidth": 2560,
+          "screenAvailHeight": 1364,
+          "visibility": "visible",
+          "focused": false,
+          "language": "en",
+          "direction": "ltr"
+        },
+        "end": {
+          "dpr": 2,
+          "visualViewportScale": 1,
+          "innerWidth": 1280,
+          "innerHeight": 956,
+          "outerWidth": 1280,
+          "outerHeight": 1040,
+          "screenX": 4,
+          "screenY": 30,
+          "screenWidth": 2560,
+          "screenHeight": 1440,
+          "screenAvailWidth": 2560,
+          "screenAvailHeight": 1364,
+          "visibility": "visible",
+          "focused": false,
+          "language": "en",
+          "direction": "ltr"
+        },
+        "changes": []
+      },
       "context": {
         "kind": "installed",
         "lang": "en"

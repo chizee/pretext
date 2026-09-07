@@ -12,6 +12,7 @@ import {
   measureDomTextWidth,
 } from './diagnostic-utils.ts'
 import { clearNavigationReport, publishNavigationPhase, publishNavigationReport } from './report-utils.ts'
+import { createBrowserEnvironmentGuard, type BrowserEnvironmentReport } from '../shared/browser-environment.ts'
 
 type ProbeLine = {
   text: string
@@ -74,6 +75,7 @@ type ProbeLineSummary = {
 
 type ProbeReport = {
   status: 'ready' | 'error'
+  environment?: BrowserEnvironmentReport
   requestId?: string
   text?: string
   whiteSpace?: 'normal' | 'pre-wrap'
@@ -182,10 +184,10 @@ function publishReport(report: ProbeReport): void {
   publishNavigationReport(report)
 }
 
-function setError(message: string): void {
+function setError(message: string, environment?: BrowserEnvironmentReport): void {
   stats.textContent = `Error: ${message}`
   if (details !== null) details.textContent = `Error: ${message}`
-  publishReport(withRequestId({ status: 'error', message }))
+  publishReport(withRequestId({ status: 'error', message, ...(environment === undefined ? {} : { environment }) }))
 }
 
 function getBrowserLinesFromSpans(prepared: PreparedTextWithSegments, measuredFont: string, dir: string): ProbeLine[] {
@@ -607,7 +609,7 @@ function formatReportDetails(report: ProbeReport): string {
   return lines.join('\n')
 }
 
-function buildProbeReport(): ProbeReport {
+function configureProbe(): void {
   document.title = 'Pretext — Text Probe'
   document.documentElement.lang = lang
   document.documentElement.dir = direction
@@ -633,7 +635,9 @@ function buildProbeReport(): ProbeReport {
   diagnosticDiv.style.width = `${width}px`
   diagnosticDiv.style.whiteSpace = cssWhiteSpace
   diagnosticDiv.style.wordBreak = cssWordBreak
+}
 
+function buildProbeReport(): ProbeReport {
   const prepared = prepareWithSegments(text, font, { whiteSpace, wordBreak, letterSpacing })
   const normalizedText = prepared.segments.join('')
   const contentWidth = width - PADDING * 2
@@ -698,13 +702,19 @@ function renderProbeReport(report: ProbeReport): void {
 }
 
 function init(): void {
+  configureProbe()
+  const guard = createBrowserEnvironmentGuard('correctness')
   try {
+    guard.assertStable()
     publishNavigationPhase('measuring', requestId)
-    const report = buildProbeReport()
+    const report = { ...buildProbeReport(), environment: guard.report() }
+    guard.assertStable()
     renderProbeReport(report)
     publishReport(report)
   } catch (error) {
-    setError(error instanceof Error ? error.message : String(error))
+    setError(error instanceof Error ? error.message : String(error), guard.report())
+  } finally {
+    guard.dispose()
   }
 }
 

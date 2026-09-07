@@ -11,9 +11,12 @@ bun install
 - `bun start` — stable local page server at <http://localhost:3000>
 - `bun run start:windows` — Windows-friendly fallback without automatic port cleanup
 - `bun run check` — typecheck, lint, and dead-code scan (`knip`)
-- `bun test` — small durable invariant suite, including approximate bidi paragraph independence and normal/pre-wrap normalization boundaries
+- `bun test` — small durable invariant suite, including browser-harness ownership/environment checks, approximate bidi paragraph independence and normal/pre-wrap normalization boundaries
 - `bun run test:wrapping --browser=all` — complete maintained checks and selected regressions against a fresh pinned-main comparison
 - `bun run test:wrapping --suite=full --browser=all` — also run the broad exploratory wrapping matrices
+
+The report-server tests use temporary loopback ports; sandboxed runs need local
+listener access. They do not launch browsers.
 
 See [the wrapping suite](tests/wrapping/README.md) for worktree comparisons,
 known-failure reporting, native observation limits and reproducible case IDs.
@@ -53,8 +56,35 @@ signed boundary spaces. Fourteen native ZWSP/WJ item witnesses require matching 
 height; the unresolved flat ZWSP reproduction remains observed separately.
 The benchmark runner requires every measurement section before writing a
 snapshot; a successful report from an unrelated page is not a benchmark result.
+Failed benchmark reports retain their evidence in `<output>.failed.json`, or under
+`.artifacts/benchmarks/` when no output path was requested.
 
-For portable Chrome correctness checks, use `bun run test:wrapping --transport=playwright --browser=chrome`. This launches installed Chrome in an isolated headed browser with its native viewport; it does not require AppleScript or a Unix shell. Install Chrome normally first; the adapter uses `playwright-core` without downloading another browser. Automation locks use the platform's temporary directory. The page server runs the current Bun executable directly, and includes demo pages as well as diagnostics. Safari continues to use the native macOS path; Playwright WebKit is not treated as Safari. This transport is for correctness checks only; benchmark scripts retain foreground native automation. Check the recorded DPR and real target fonts when validating platform-specific font issues.
+Browser measurements record the test page's starting and ending DPR, screen and
+window dimensions, viewport scale, document language/direction, visibility and
+focus. There is no configured target display: each run reads the screen currently
+hosting its browser window. The shared guard retains observed changes, even if
+the page returns to its starting state. A scale or document-context change
+invalidates correctness measurements; rerun rather than clearing caches halfway through. Fixed-width
+correctness checks may stay in the background or move between same-scale screens.
+Benchmarks require a visible, focused page throughout and reject observed window,
+viewport or screen changes. The three runs must have matching environments before
+we take their median; snapshots retain each run's request and environment.
+
+DPR includes page zoom; visual viewport scale is a separate measurement. Screen
+sizes are browser-reported CSS dimensions, not a physical monitor ID or a reliable
+refresh-rate reading. Keep the browser on one display for benchmark comparisons.
+These checks cannot detect every hardware/load change or reconstruct an old run's
+missing environment. End-only DPR in an older report does not establish stability.
+
+Each wrapping page owns one request, including configuration and sequential row
+batches. Completion must come from the requested URL and the owned browser tab.
+Stale traffic cannot contribute to another context, and failed or diagnostic-only
+runs cannot replace checked-in snapshots. Safari uses a dedicated window and
+stops if additional tabs make ownership ambiguous. Local diagnostic servers are
+owned by the checker; an occupied explicit port fails instead of reusing another
+checkout. Browser teardown finishes before releasing the browser lock.
+
+For portable Chrome correctness checks, use `bun run test:wrapping --transport=playwright --browser=chrome`. This launches installed Chrome in an isolated headed browser with its native viewport; it does not require AppleScript or a Unix shell. Install Chrome normally first; the adapter uses `playwright-core` without downloading another browser. Automation locks use the platform's temporary directory. The page server runs the current Bun executable directly, and includes demo pages as well as diagnostics. Safari continues to use the native macOS path; Playwright WebKit is not treated as Safari. This transport is for correctness checks only; Playwright can emulate focus, so its visible/focused fields do not prove native tab attention. Benchmark scripts retain foreground native automation. Check the recorded DPR and real target fonts when validating platform-specific font issues.
 
 When a probe finds a first-break mismatch, the report includes a short trace. `sN:gM` identifies a segment and grapheme; `[ours]` and `[browser]` identify the competing break positions. Safari `Range` extraction can be wrong around preserved whitespace and URL queries even when the rendered height is correct, so compare `--method=span` before changing the engine.
 

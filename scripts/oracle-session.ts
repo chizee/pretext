@@ -2,12 +2,10 @@ import { chromium } from 'playwright-core'
 import { createBrowserSession, type BrowserKind, type BrowserSession } from './browser-automation.ts'
 
 export type OracleTransport = 'native' | 'playwright'
-export type OracleSession = Omit<BrowserSession, 'close'> & { close: () => void | Promise<void> }
-
-export async function createOracleSession(browser: BrowserKind, transport: OracleTransport): Promise<OracleSession> {
+export async function createOracleSession(browser: BrowserKind, transport: OracleTransport): Promise<BrowserSession> {
   switch (transport) {
     case 'native':
-      return createBrowserSession(browser)
+      return createBrowserSession(browser, { foreground: false, headless: false })
     case 'playwright': {
       if (browser !== 'chrome') throw new Error('The portable oracle transport currently targets installed Chrome. Use native automation for Safari.')
       const instance = await chromium.launch({ channel: 'chrome', headless: false })

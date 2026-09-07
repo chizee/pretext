@@ -29,6 +29,13 @@ leave an earlier font resolution in the Canvas context. Native element language
 and preparation locale remain separate inputs. Loading the same font through
 `FontFace` can also change Safari behavior.
 
+The environment guard starts after font readiness and before case generation or
+preparation. It records the page's start/end environment and latches observed
+changes; a DPR, visual scale or document-context change invalidates the run.
+Background correctness remains allowed. Snapshots also reject incompatible scales
+across contexts. See [DEVELOPMENT.md](../../DEVELOPMENT.md) for the stricter
+foreground benchmark rules and what screen metadata can establish.
+
 ## Gates and observations
 
 Maintained cases preserve their original modes, content widths, locale, browser
@@ -138,12 +145,15 @@ lists the other options.
 
 Reports go under `.artifacts/wrapping/`, or `--output=/new/directory`:
 
-- `manifest.json` identifies frozen sources, harness hashes, selection and gates.
+- `manifest.json` identifies frozen sources, harness hashes, the browser bundle,
+  Bun version, selection and gates.
 - `browser-direction-rows.ndjson` preserves inputs, native observations, candidate
   predictions and assertions, streamed in batches.
 - `browser-direction.json` records completion and the environments used; the
   corresponding `browser-direction-context.json` files retain each page report,
-  with `fixtures` or the installed context's language as the context label.
+  with `fixtures` or the installed context's language as the context label. Each
+  report includes its request ID and requested/observed tab URL; host failures
+  retain a separate `browser-direction-failure.json` artifact.
 - `browser-direction-summary.json` records independent counts, required failures
   and exact changes against the preserved references.
 - `numeric-*.json` and `numeric-summary.json` record synthetic API checks and TAB
@@ -152,7 +162,8 @@ Reports go under `.artifacts/wrapping/`, or `--output=/new/directory`:
 `test:wrapping:snapshot` derives the accuracy/corpus snapshots and dashboards from
 the same run. Checked-in snapshots keep totals, provenance and mismatches; raw
 successful rows are available in the run artifact. `/accuracy` displays those
-snapshots. Individual corpus/probe/font tools remain detailed investigations,
+snapshots. Publication requires a passing run with the numeric checks enabled;
+failed run artifacts remain available for diagnosis. Individual corpus/probe/font tools remain detailed investigations,
 including alternate extractors and slices; they are not a second acceptance suite.
 
 Add a counterexample with its reproducer, nearby controls and relevant dimensions.

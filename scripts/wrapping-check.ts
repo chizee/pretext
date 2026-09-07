@@ -2,10 +2,12 @@ import { createHash, randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { appendFile, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
-import { acquireBrowserAutomationLock, createBrowserSession } from './browser-automation.ts'
-import { createOracleSession, type OracleSession } from './oracle-session.ts'
+import { acquireBrowserAutomationLock, type BrowserSession } from './browser-automation.ts'
+import { createOracleSession } from './oracle-session.ts'
+import { createWrappingTransport } from './wrapping-transport.ts'
+import { environmentFailure, parseBrowserEnvironmentReport } from '../shared/browser-environment.ts'
 import { createSummary, printSummary, regressionCount, type CompactRow } from '../tests/wrapping/report.ts'
-import type { BrowserConfig, BrowserContext, BrowserFailure, BrowserKind, BrowserReport, CaseResult, FontFixture } from '../tests/wrapping/types.ts'
+import type { BrowserConfig, BrowserContext, BrowserKind, BrowserReport, FontFixture } from '../tests/wrapping/types.ts'
 import baseline from '../tests/wrapping/baseline.json'
 import { createSnapshots } from '../tests/wrapping/snapshots.ts'
 
@@ -49,6 +51,7 @@ const schedule = value('suite') ?? (value('case') === undefined ? 'ordinary' : '
 if (schedule !== 'ordinary' && schedule !== 'full') throw new Error('--suite must be ordinary or full')
 const snapshot = args.includes('--snapshot')
 if (snapshot && (browserOption !== 'all' || value('case') !== undefined || value('family') !== undefined || value('direction') !== undefined || args.some(arg => arg.startsWith('--candidate=')))) throw new Error('--snapshot requires --browser=all, both directions, no filters, and this checkout as the candidate')
+if (snapshot && args.includes('--skip-numeric')) throw new Error('--snapshot requires numeric validation; --skip-numeric is diagnostic only')
 const requestedDirection = value('direction')
 if (requestedDirection !== undefined && requestedDirection !== 'ltr' && requestedDirection !== 'rtl') throw new Error('--direction must be ltr or rtl')
 const directions: Array<'ltr' | 'rtl'> = requestedDirection === undefined ? ['ltr', 'rtl'] : [requestedDirection]
@@ -126,6 +129,11 @@ const harness = join(output, 'harness')
 await cp(join(root, 'tests/wrapping'), join(harness, 'tests/wrapping'), { recursive: true })
 await mkdir(join(harness, 'src'), { recursive: true })
 await cp(join(root, 'src/test-data.ts'), join(harness, 'src/test-data.ts'))
+await cp(join(root, 'shared'), join(harness, 'shared'), { recursive: true })
+await mkdir(join(harness, 'scripts'), { recursive: true })
+for (const file of ['wrapping-check.ts', 'wrapping-transport.ts', 'browser-automation.ts', 'oracle-session.ts']) {
+  await cp(join(root, 'scripts', file), join(harness, 'scripts', file))
+}
 await mkdir(join(harness, 'corpora'), { recursive: true })
 for (const file of await readdir(join(root, 'corpora'))) {
   if (file.endsWith('.txt') || file === 'sources.json') await cp(join(root, 'corpora', file), join(harness, 'corpora', file))
@@ -145,12 +153,10 @@ if (!build.success) throw new Error(build.logs.map(String).join('\n'))
 const bundle = build.outputs.find(file => file.kind === 'entry-point')
 if (bundle === undefined) throw new Error('Browser bundle missing')
 const suiteFiles = await fingerprint(harness, path => !path.endsWith('.md') && !path.endsWith('.test.ts'))
-suiteFiles['scripts/wrapping-check.ts'] = hash(await readFile(import.meta.path))
-suiteFiles['scripts/browser-automation.ts'] = hash(await readFile(join(root, 'scripts/browser-automation.ts')))
 const suiteHash = hash(JSON.stringify(suiteFiles))
 const snapshots = createSnapshots()
 const manifest = {
-  createdAt: new Date().toISOString(), suiteHash, suiteFiles, schedule, browsers, directions,
+  createdAt: new Date().toISOString(), suiteHash, suiteFiles, bundleHash: hash(await readFile(bundle.path)), bunVersion: Bun.version, schedule, browsers, directions,
   family: value('family') ?? null, caseId: value('case') ?? null,
   numericEnabled: !args.includes('--skip-numeric'), strict: args.includes('--strict'),
   sources, preserve, transport,
@@ -213,26 +219,45 @@ if (!args.includes('--skip-numeric')) {
 }
 let observedRows = 0
 for (const browser of browsers) for (const direction of directions) {
-  const config: BrowserConfig = { requestId: '', context: { kind: 'fixtures' }, browser, schedule, direction, family: value('family') ?? null, caseId: value('case') ?? null, fonts }
-  let finish!: (report: BrowserReport | BrowserFailure) => void
+  let page: ReturnType<typeof createWrappingTransport> | undefined
+  let pageUrl: string | undefined
   const collector = createSummary(sources.map(source => source.name), preserve)
   const reports: BrowserReport[] = []
   let rowCount = 0
   const rowsFile = join(output, `${browser}-${direction}-rows.ndjson`)
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
-    const url = new URL(request.url)
-    switch (url.pathname) {
-      case '/': return new Response('<!doctype html><meta charset="utf-8"><title>Pretext wrapping suite</title><script type="module" src="/runner.js"></script>', { headers: { 'content-type': 'text/html' } })
-      case '/runner.js': return new Response(Bun.file(bundle.path), { headers: { 'content-type': 'text/javascript' } })
-      case '/config': return Response.json(config)
-      case '/report':
-        if (request.method !== 'POST') return new Response('POST required', { status: 405 })
-        finish(await request.json() as BrowserReport | BrowserFailure)
-        return new Response('ok')
-      case '/rows': {
-        if (request.method !== 'POST') return new Response('POST required', { status: 405 })
-        const batch = await request.json() as CaseResult[]
-        if (snapshot) snapshots.addRows(browser, batch)
+  // Acquire before creating the server; every acquired resource is in the
+  // same cleanup scope, including session setup failures.
+  const lock = await acquireBrowserAutomationLock(browser)
+  let server: ReturnType<typeof Bun.serve> | undefined
+  let session: BrowserSession | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+      const url = new URL(request.url)
+      switch (url.pathname) {
+        case '/':
+          if (request.url !== pageUrl) return new Response('Inactive request', { status: 409 })
+          return new Response('<!doctype html><meta charset="utf-8"><title>Pretext wrapping suite</title><script type="module" src="/runner.js"></script>', { headers: { 'content-type': 'text/html' } })
+        case '/runner.js': return new Response(Bun.file(bundle.path), { headers: { 'content-type': 'text/javascript' } })
+        case '/config': case '/report': case '/rows': case '/progress':
+          return page === undefined ? new Response('No active request', { status: 409 }) : page.fetch(request)
+        default: {
+          const font = fontMetadata.find(font => url.pathname === `/fonts/${font.file}`)
+          return font === undefined ? new Response('Not found', { status: 404 }) : new Response(Bun.file(join(fontDirectory, font.file)))
+        }
+      }
+    } })
+    session = await createOracleSession(browser, transport)
+    console.log(`Running ${browser}/${direction}, ${schedule}; ${sources.map(source => source.name).join(', ')}`)
+    // Fixture fonts must not override maintained installed-font fallbacks.
+    // Generic Canvas fonts also inherit the document language at resolution.
+    const contexts: BrowserContext[] = [{ kind: 'fixtures' }]
+    for (const context of contexts) {
+      const config: BrowserConfig = { requestId: randomUUID(), context, browser, schedule, direction, family: value('family') ?? null, caseId: value('case') ?? null, fonts }
+      const label = context.kind === 'fixtures' ? 'fixtures' : context.lang
+      const before = rowCount
+      pageUrl = `http://127.0.0.1:${server.port}/?request=${config.requestId}`
+      page = createWrappingTransport(config, pageUrl, async batch => {
         await appendFile(rowsFile, batch.map(row => JSON.stringify(row)).join('\n') + '\n')
         const compact: CompactRow[] = batch.map(row => ({
           input: { id: row.input.id, family: row.input.family, scope: row.input.scope, ...(row.input.required === undefined ? {} : { required: row.input.required }) },
@@ -245,43 +270,34 @@ for (const browser of browsers) for (const direction of directions) {
           }),
         }))
         collector.addRows(compact)
+        if (snapshot) snapshots.addRows(browser, batch)
         rowCount += batch.length
-        return new Response('ok')
-      }
-      case '/progress':
-        {
-          const progress = await request.json() as { completed: number; total: number }
-          if (progress.completed % 1024 === 0 || progress.completed === progress.total) console.log(`${browser}/${direction}/${config.context.kind === 'fixtures' ? 'fixtures' : config.context.lang}: ${progress.completed}/${progress.total}`)
-        }
-        return new Response('ok')
-      default: {
-        const font = fontMetadata.find(font => url.pathname === `/fonts/${font.file}`)
-        return font === undefined ? new Response('Not found', { status: 404 }) : new Response(Bun.file(join(fontDirectory, font.file)))
-      }
-    }
-  } })
-  const lock = await acquireBrowserAutomationLock(browser)
-  let session: OracleSession | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    session = transport === 'playwright' ? await createOracleSession(browser, transport) : createBrowserSession(browser, { foreground: false, headless: false })
-    console.log(`Running ${browser}/${direction}, ${schedule}; ${sources.map(source => source.name).join(', ')}`)
-    // Fixture fonts must not override maintained installed-font fallbacks.
-    // Generic Canvas fonts also inherit the document language at resolution.
-    const contexts: BrowserContext[] = [{ kind: 'fixtures' }]
-    for (const context of contexts) {
-      config.context = context
-      config.requestId = randomUUID()
-      const label = context.kind === 'fixtures' ? 'fixtures' : context.lang
-      const before = rowCount
-      const reportPromise = new Promise<BrowserReport | BrowserFailure>(resolve => { finish = resolve })
-      await session.navigate(`http://127.0.0.1:${server.port}/?request=${config.requestId}`)
-      const report = await Promise.race([reportPromise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`Timed out after ${timeout}ms; last progress is above`)), timeout) })])
+      }, progress => {
+        if (progress.completed % 1024 === 0 || progress.completed === progress.total) console.log(`${browser}/${direction}/${label}: ${progress.completed}/${progress.total}`)
+      })
+      await session.navigate(pageUrl)
+      const completion = await Promise.race([page.completed, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`Timed out after ${timeout}ms; last progress is above`)), timeout) })])
       clearTimeout(timer)
       timer = undefined
-      await writeFile(join(output, `${browser}-${direction}-${label}.json`), JSON.stringify({ ...report, suiteHash, sourceManifest: 'manifest.json', rowsFile: `${browser}-${direction}-rows.ndjson` }) + '\n')
+      const report = completion.report
+      const reportFile = join(output, `${browser}-${direction}-${label}.json`)
+      const record = { ...report, requestId: completion.requestId, url: completion.url, suiteHash, sourceManifest: 'manifest.json', rowsFile: `${browser}-${direction}-rows.ndjson` }
+      // Persist page failures and their environment before another automation
+      // call can fail or the browser session is closed.
+      await writeFile(reportFile, JSON.stringify(record) + '\n')
       if (report.status === 'error') throw new Error(report.message)
+      const observedUrl = await session.readLocationUrl()
+      await writeFile(reportFile, JSON.stringify({ ...record, observedUrl }) + '\n')
+      if (observedUrl !== pageUrl) throw new Error(`Browser left the requested wrapping page: expected ${pageUrl}, observed ${observedUrl}`)
+      const measurement = parseBrowserEnvironmentReport(report.environment.measurement)
+      report.environment.measurement = measurement
+      const invalidEnvironment = environmentFailure(measurement, 'correctness')
+      if (invalidEnvironment !== null) throw new Error(invalidEnvironment)
       if (rowCount - before !== report.rowCount) throw new Error(`Incomplete ${label} report: ${rowCount - before}/${report.rowCount} rows received`)
+      if (reports.length === 0) {
+        const actual = report.environment.measurement.end
+        console.log(`${browser}/${direction}: DPR ${actual.dpr}; screen ${actual.screenWidth}×${actual.screenHeight}; viewport ${actual.innerWidth}×${actual.innerHeight}; window at ${actual.screenX},${actual.screenY}`)
+      }
       reports.push(report)
       if (context.kind === 'fixtures') contexts.push(...report.contexts)
       if (snapshot && report.rowCount > 0) snapshots.addEnvironment(browser, direction, report.environment)
@@ -305,17 +321,22 @@ for (const browser of browsers) for (const direction of directions) {
     failed ||= regressions > 0 || errors > 0 || strictFailures > 0 || requiredFailures > 0
     await writeFile(join(output, `${browser}-${direction}-summary.json`), JSON.stringify({ ...summary, regressions, errors, strictFailures, requiredFailures }, null, 2) + '\n')
     console.log(`${browser}/${direction}: ${regressions} new regressions, ${requiredFailures} failed required checks, ${errors} execution errors; report ${join(output, `${browser}-${direction}.json`)}`)
+  } catch (error) {
+    await writeFile(join(output, `${browser}-${direction}-failure.json`), JSON.stringify({
+      status: 'error', message: error instanceof Error ? error.stack ?? error.message : String(error),
+      expectedUrl: pageUrl ?? null, receivedRows: rowCount, suiteHash, sourceManifest: 'manifest.json',
+    }, null, 2) + '\n')
+    throw error
   } finally {
     if (timer !== undefined) clearTimeout(timer)
     try {
       await session?.close()
     } finally {
-      lock.release()
-      await server.stop()
+      try { await server?.stop() } finally { lock.release() }
     }
   }
 }
 if (observedRows === 0) throw new Error('No cases matched the requested browser, family, case ID, and schedule')
 console.log(`Suite ${suiteHash}; sources and reports: ${output}`)
-if (snapshot) await snapshots.write(root, { suiteHash, source: sources.find(source => source.name === 'current')!, output })
+if (snapshot && !failed) await snapshots.write(root, { suiteHash, source: sources.find(source => source.name === 'current')!, output })
 if (failed) process.exitCode = 1
