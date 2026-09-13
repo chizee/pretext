@@ -2,7 +2,7 @@ import { getSharedGraphemeSegmenter } from './analysis.js'
 import { isDiscretionaryLineEnd } from './line-break.js'
 import type { PreparedTextWithSegments } from './layout.js'
 
-let sharedLineTextCaches = new WeakMap<PreparedTextWithSegments, Map<number, number[]>>()
+const sharedLineTextCaches = new WeakMap<PreparedTextWithSegments, Map<number, number[]>>()
 
 function getSegmentGraphemeOffsets(
   segmentIndex: number,
@@ -58,8 +58,4 @@ export function buildLineTextFromRange(
   }
 
   return isDiscretionaryLineEnd(prepared.kinds, endSegmentIndex, endGraphemeIndex) ? text + '-' : text
-}
-
-export function clearLineTextCaches(): void {
-  sharedLineTextCaches = new WeakMap<PreparedTextWithSegments, Map<number, number[]>>()
 }

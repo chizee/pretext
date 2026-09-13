@@ -50,7 +50,6 @@ import {
 } from './line-break.js'
 import {
   buildLineTextFromRange,
-  clearLineTextCaches,
   getLineTextCache,
 } from './line-text.js'
 
@@ -464,19 +463,12 @@ function measureAnalysis(
     const nextKind = analysis.kinds[next]!
     if (nextKind !== 'text' && nextKind !== 'glue') return false
     const after = analysis.texts[next]!
-    const beforeMetrics = previousJoinableMetrics!
-    const shapesAcross = beforeMetrics.shapesAcrossSoftHyphen ??= new Map()
-    let result = shapesAcross.get(after)
-    if (result === undefined) {
-      const joined = before + after
-      const apart =
-        getCorrectedSegmentWidth(before, beforeMetrics, emojiCorrection) +
-        getCorrectedSegmentWidth(after, getSegmentMetrics(after, cache), emojiCorrection)
-      const together = getCorrectedSegmentWidth(joined, getSegmentMetrics(joined, cache), emojiCorrection)
-      result = apart - together > engineProfile.lineFitEpsilon
-      shapesAcross.set(after, result)
-    }
-    return result
+    const joined = before + after
+    const apart =
+      getCorrectedSegmentWidth(before, previousJoinableMetrics!, emojiCorrection) +
+      getCorrectedSegmentWidth(after, getSegmentMetrics(after, cache), emojiCorrection)
+    const together = getCorrectedSegmentWidth(joined, getSegmentMetrics(joined, cache), emojiCorrection)
+    return apart - together > engineProfile.lineFitEpsilon
   }
 
   function getEntryGeometry(
@@ -698,7 +690,6 @@ function measureAnalysis(
       const previousKind = mi > 0 ? analysis.kinds[mi - 1] : undefined
       const nextText = mi + 1 < analysis.len ? analysis.texts[mi + 1]! : ''
       const takesLetterSpacing = hasLetterSpacing && (
-        engineProfile.letterSpaceNextLine ||
         ((previousKind === 'text' || previousKind === 'glue') && needsComplexTextPath(analysis.texts[mi - 1]!)) ||
         (leadingCombiningMarkRe.test(nextText) && needsComplexTextPath(nextText))
       )
@@ -1044,7 +1035,6 @@ export function layoutWithLines(prepared: PreparedTextWithSegments, maxWidth: nu
 
 export function clearCache(): void {
   clearAnalysisCaches()
-  clearLineTextCaches()
   clearMeasurementCaches()
 }
 
