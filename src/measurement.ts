@@ -92,8 +92,12 @@ export type EngineProfile = {
   // ordinary text for now: Blink joins Arabic across a soft hyphen that Pretext
   // measures as separate segments, which the break before NEL was hiding, and
   // release Gecko draws NEL with no advance while its Canvas measures a space.
-  // NEL control segments take letter spacing only where WebKit's complex text
-  // path spaces NEL. Blink spaces NEL outside cursive runs.
+  // WebKit's simple text path gives NEL no letter spacing, at either sign, and
+  // its complex path spaces it. A NEL control segment takes spacing after text
+  // or glue in WebKit's complex ranges, or before such text that starts with a
+  // combining mark. Preparation cannot see the page direction, so after complex
+  // text whose direction differs from the page's it keeps spacing Safari omits.
+  // Blink spaces NEL outside cursive runs.
   breakOnlyAfterNextLine: boolean
   // WebKit moves a tab to the following stop when less than half a space would
   // remain before the next one (FontCascade::tabWidth).

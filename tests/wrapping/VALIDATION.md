@@ -261,9 +261,8 @@ text or glue ends the line before that content. WebKit's simple text path gives
 NEL no letter spacing, so NEL takes spacing only next to complex text or before a
 combining mark. Safari also moves a `pre-wrap` tab to the following stop when
 less than half a space would remain before the next one. The profile fields
-`breakOnlyAfterNextLine`, `letterSpaceNextLine` and `skipNarrowTabStops` key on
-the layout engine; Chrome and Firefox keep NEL as ordinary text and the previous
-tab rule.
+`breakOnlyAfterNextLine` and `skipNarrowTabStops` key on the layout engine;
+Chrome and Firefox keep NEL as ordinary text and the previous tab rule.
 
 The installed gate ran this change on `daf13ac` against pinned `e5e66be`: Chrome
 153 through the Playwright transport, Safari 26.5.2 and Firefox 155 natively,
