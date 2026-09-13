@@ -17,6 +17,41 @@ All accuracy, letter-spacing and corpus result payloads are unchanged; refreshed
 snapshots change only provenance and environment records. Runtime sources and
 the baseline pin are unchanged, so no runtime benchmark was needed.
 
+## Smaller prepare state
+
+This change starts from main after #254 and leaves output unchanged. The
+`letterSpaceNextLine` profile field was false wherever it was read and is gone.
+The soft-hyphen shaping map and `clearLineTextCaches` duplicated caches that
+already exist. Prepared handles no longer keep per-segment `lineEndFitAdvances`
+and `lineEndPaintAdvances`: the complex line walker derives them from the width,
+kind and letter-spacing count each handle already holds. Those arrays were
+undocumented fields on the published `prepareWithSegments()` type. The hyphen,
+mandatory-break and CJK line-start sets now read the generated line-break class
+table, and `layoutNextLine()`, `layoutNextLineRange()` and the rich-inline item
+step share their duplicated advances. The library loses 110 lines net, and the
+core bundle about 316 B gzipped.
+
+Before the browsers, the Blink, WebKit, Gecko and Android profiles produced no
+output differences across 163 texts, about 1,956 handles and 11,736 rows each,
+with identical Canvas call counts. The derived advances matched the stored arrays
+in about 1.5 million checks per profile, and the numeric companion is unchanged.
+
+The installed gate ran against #250's pin `b4d9fd7`: Chrome 153 through the
+Playwright transport, Safari 26.5.2 and Firefox 155 natively, both directions.
+No leg fixes or loses a metric, and none has required failures, execution errors,
+or new API or rich failures.
+
+Interleaved V8 timings (Node 23, a fake canvas with a Chrome user agent, 31
+rounds, head against base) read cold `prepare()` over the long-form corpus 2.5%
+faster and warm 1.6% faster. `layout()` is 15% faster for pre-wrap, 7% faster
+with letter spacing and flat (+0.5%) on the simple path. Soft-hyphen-heavy text
+prepares 1.9% slower cold (10.0 ms against 9.85), because each soft hyphen now
+looks up its joined text in the segment metrics cache instead of the removed map,
+and flat warm.
+
+`bun test` and `bun run check` pass. The baseline advances to `cc2328b`, and the
+ordinary snapshots were regenerated against it.
+
 ## Small kana and ー in Chrome and Firefox
 
 This runtime change starts from main after #249. Chrome and Firefox now resolve
