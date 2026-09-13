@@ -38,7 +38,7 @@ test('fresh entry geometry survives copied public range cursors without layout m
   // A numeric fixture keeps this source/cursor invariant independent of a
   // Canvas backend. It is not a claim about native control or mark advances.
   const prepared = {
-    widths: [19], lineEndFitAdvances: [19], lineEndPaintAdvances: [19], kinds: ['text'],
+    widths: [19], kinds: ['text'],
     simpleLineWalkFastPath: false, segLevels: null, breakableFitAdvances: [advances],
     breakablePreferredBreaks: [null], entryGeometry: [entry], letterSpacing: 0,
     spacingGraphemeCounts: [], discretionaryHyphenWidth: 4, tabStopAdvance: 32,

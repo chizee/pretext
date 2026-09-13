@@ -59,8 +59,6 @@ declare const preparedTextBrand: unique symbol
 
 type PreparedCore = {
   widths: number[] // Segment widths, e.g. [42.5, 4.4, 37.2]
-  lineEndFitAdvances: number[] // Width contribution when a line ends after this segment
-  lineEndPaintAdvances: number[] // Painted contribution before terminal line-end letter-spacing
   kinds: SegmentBreakKind[] // Break behavior per segment, e.g. ['text', 'space', 'text']
   simpleLineWalkFastPath: boolean // Normal text can use the simpler old line walker across all layout APIs
   segLevels: Int8Array | null // Rich-path bidi metadata for custom rendering; layout() never reads it
@@ -145,8 +143,6 @@ function createEmptyPrepared(includeSegments: boolean): InternalPreparedText | P
   if (includeSegments) {
     return {
       widths: [],
-      lineEndFitAdvances: [],
-      lineEndPaintAdvances: [],
       kinds: [],
       simpleLineWalkFastPath: true,
       segLevels: null,
@@ -164,8 +160,6 @@ function createEmptyPrepared(includeSegments: boolean): InternalPreparedText | P
   }
   return {
     widths: [],
-    lineEndFitAdvances: [],
-    lineEndPaintAdvances: [],
     kinds: [],
     simpleLineWalkFastPath: true,
     segLevels: null,
@@ -423,8 +417,6 @@ function measureAnalysis(
   }
 
   const widths: number[] = []
-  const lineEndFitAdvances: number[] = []
-  const lineEndPaintAdvances: number[] = []
   const kinds: SegmentBreakKind[] = []
   let simpleLineWalkFastPath = !hasLetterSpacing
   const segStarts = includeSegments ? [] as number[] : null
@@ -504,8 +496,6 @@ function measureAnalysis(
   function pushMeasuredSegment(
     text: string,
     width: number,
-    lineEndFitAdvance: number,
-    lineEndPaintAdvance: number,
     kind: SegmentBreakKind,
     start: number,
     breakableFitAdvance: number[] | null,
@@ -517,8 +507,6 @@ function measureAnalysis(
       simpleLineWalkFastPath = false
     }
     widths.push(width)
-    lineEndFitAdvances.push(lineEndFitAdvance)
-    lineEndPaintAdvances.push(lineEndPaintAdvance)
     kinds.push(kind)
     segStarts?.push(start)
     breakableFitAdvances.push(breakableFitAdvance)
@@ -560,18 +548,6 @@ function measureAnalysis(
       spacingGraphemeCount,
       letterSpacing,
     )
-    const baseLineEndFitAdvance =
-      kind === 'space' || kind === 'preserved-space' || kind === 'zero-width-break'
-        ? 0
-        : width
-    const lineEndFitAdvance =
-      baseLineEndFitAdvance === 0
-        ? 0
-        : baseLineEndFitAdvance + (spacingGraphemeCount > 0 ? letterSpacing : 0)
-    const lineEndPaintAdvance =
-      kind === 'space' || kind === 'zero-width-break'
-        ? 0
-        : width
 
     if (allowOverflowBreaks && text.length > 1) {
       let fitMode: BreakableFitMode = 'sum-graphemes'
@@ -603,8 +579,6 @@ function measureAnalysis(
       pushMeasuredSegment(
         text,
         width,
-        lineEndFitAdvance,
-        lineEndPaintAdvance,
         kind,
         start,
         fitAdvances,
@@ -619,8 +593,6 @@ function measureAnalysis(
     pushMeasuredSegment(
       text,
       width,
-      lineEndFitAdvance,
-      lineEndPaintAdvance,
       kind,
       start,
       null,
@@ -639,8 +611,6 @@ function measureAnalysis(
       pushMeasuredSegment(
         segText,
         0,
-        discretionaryHyphenWidth,
-        discretionaryHyphenWidth,
         segKind,
         segStart,
         null,
@@ -656,7 +626,7 @@ function measureAnalysis(
 
     if (segKind === 'hard-break') {
       const endSegmentIndex = widths.length
-      pushMeasuredSegment(segText, 0, 0, 0, segKind, segStart, null, null, 0)
+      pushMeasuredSegment(segText, 0, segKind, segStart, null, null, 0)
       chunks.push({
         startSegmentIndex: chunkStartSegmentIndex,
         endSegmentIndex,
@@ -669,8 +639,6 @@ function measureAnalysis(
     if (segKind === 'tab') {
       pushMeasuredSegment(
         segText,
-        0,
-        0,
         0,
         segKind,
         segStart,
@@ -693,8 +661,7 @@ function measureAnalysis(
         ((previousKind === 'text' || previousKind === 'glue') && needsComplexTextPath(analysis.texts[mi - 1]!)) ||
         (leadingCombiningMarkRe.test(nextText) && needsComplexTextPath(nextText))
       )
-      const spacing = takesLetterSpacing ? letterSpacing : 0
-      pushMeasuredSegment(segText, width, width + spacing, width, segKind, segStart, null, null, takesLetterSpacing ? 1 : 0)
+      pushMeasuredSegment(segText, width, segKind, segStart, null, null, takesLetterSpacing ? 1 : 0)
       continue
     }
 
@@ -741,8 +708,6 @@ function measureAnalysis(
   if (segments !== null) {
     return {
       widths,
-      lineEndFitAdvances,
-      lineEndPaintAdvances,
       kinds,
       simpleLineWalkFastPath,
       segLevels,
@@ -760,8 +725,6 @@ function measureAnalysis(
   }
   return {
     widths,
-    lineEndFitAdvances,
-    lineEndPaintAdvances,
     kinds,
     simpleLineWalkFastPath,
     segLevels,
