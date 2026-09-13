@@ -9,8 +9,6 @@ export type LineBreakCursor = {
 
 export type PreparedLineBreakData = {
   widths: number[]
-  lineEndFitAdvances: number[]
-  lineEndPaintAdvances: number[] // Painted contribution before terminal line-end letter-spacing
   kinds: SegmentBreakKind[]
   simpleLineWalkFastPath: boolean
   breakableFitAdvances: (number[] | null)[]
@@ -92,7 +90,7 @@ function getLineEndContribution(leadingSpacing: number, segmentContribution: num
   return segmentContribution === 0 ? 0 : leadingSpacing + segmentContribution
 }
 
-function getTabTrailingLetterSpacing(
+function getTrailingLetterSpacing(
   prepared: PreparedLineBreakData,
   segmentIndex: number,
 ): number {
@@ -104,38 +102,29 @@ function getTabTrailingLetterSpacing(
     : 0
 }
 
+// A line that ends after a whole segment charges its advance and the letter
+// spacing gap after it. Spaces and zero-width breaks hang, and zero-width text
+// owns no gap, though NEL does. The walker handles soft hyphens before this.
 function getWholeSegmentFitContribution(
   prepared: PreparedLineBreakData,
   kind: SegmentBreakKind,
+  breakAfter: boolean,
   segmentIndex: number,
   leadingSpacing: number,
   segmentWidth: number,
 ): number {
-  const segmentContribution = kind === 'tab'
-    ? segmentWidth + getTabTrailingLetterSpacing(prepared, segmentIndex)
-    : prepared.lineEndFitAdvances[segmentIndex]!
-  return getLineEndContribution(leadingSpacing, segmentContribution)
+  if (breakAfter ? kind !== 'tab' : segmentWidth === 0 && kind !== 'control') return 0
+  return getLineEndContribution(leadingSpacing, segmentWidth + getTrailingLetterSpacing(prepared, segmentIndex))
 }
 
-function getBreakOpportunityFitContribution(
-  prepared: PreparedLineBreakData,
-  kind: SegmentBreakKind,
-  segmentIndex: number,
-  leadingSpacing: number,
-): number {
-  const segmentContribution = kind === 'tab' ? 0 : prepared.lineEndFitAdvances[segmentIndex]!
-  return getLineEndContribution(leadingSpacing, segmentContribution)
-}
-
+// A line that ends after a collapsible space or a zero-width break paints none
+// of it. The walker handles soft hyphens before this.
 function getLineEndPaintContribution(
-  prepared: PreparedLineBreakData,
   kind: SegmentBreakKind,
-  segmentIndex: number,
   leadingSpacing: number,
   segmentWidth: number,
 ): number {
-  const segmentContribution = kind === 'tab' ? segmentWidth : prepared.lineEndPaintAdvances[segmentIndex]!
-  return getLineEndContribution(leadingSpacing, segmentContribution)
+  return kind === 'space' || kind === 'zero-width-break' ? 0 : getLineEndContribution(leadingSpacing, segmentWidth)
 }
 
 function getBreakableGraphemeAdvance(
@@ -681,10 +670,10 @@ function walkPreparedComplexLines(
     advance: number,
   ): void {
     if (!breakAfter) return
-    const fitAdvance = getBreakOpportunityFitContribution(prepared, kind, segmentIndex, leadingSpacing)
-    const paintAdvance = getLineEndPaintContribution(prepared, kind, segmentIndex, leadingSpacing, segmentWidth)
+    const paintAdvance = getLineEndPaintContribution(kind, leadingSpacing, segmentWidth)
     pendingBreakSegmentIndex = segmentIndex + 1
-    pendingBreakFitWidth = lineW - advance + fitAdvance
+    // The break segment hangs with the gap before it.
+    pendingBreakFitWidth = lineW - advance
     pendingBreakPaintWidth = lineW - advance + paintAdvance
     pendingBreakKind = kind
   }
@@ -818,7 +807,6 @@ function walkPreparedComplexLines(
           ? getTabAdvance(lineW + leadingSpacing, prepared.tabStopAdvance, engineProfile.skipNarrowTabStops ? prepared.tabStopAdvance / 16 : 0)
           : widths[i]!
         const advance = leadingSpacing + w
-        const fitAdvance = getWholeSegmentFitContribution(prepared, kind, i, leadingSpacing, w)
 
         if (kind === 'soft-hyphen' && startGraphemeIndex === 0) {
           if (hasContent) {
@@ -839,6 +827,7 @@ function walkPreparedComplexLines(
           continue
         }
 
+        const fitAdvance = getWholeSegmentFitContribution(prepared, kind, breakAfter, i, leadingSpacing, w)
         if (!hasContent) {
           if (startGraphemeIndex > 0) {
             const line = appendBreakableSegmentFrom(i, startGraphemeIndex)
@@ -873,12 +862,9 @@ function walkPreparedComplexLines(
             lineEndSegmentIndex = i - 1
             lineEndGraphemeIndex = 0
           }
-          const currentBreakFitWidth =
-            lineW + getBreakOpportunityFitContribution(prepared, kind, i, leadingSpacing)
-          const currentBreakPaintWidth =
-            lineW + getLineEndPaintContribution(prepared, kind, i, leadingSpacing, w)
-
-          if (breakAfter && currentBreakFitWidth <= fitLimit) {
+          // A break segment hangs with the gap before it.
+          if (breakAfter && lineW <= fitLimit) {
+            const currentBreakPaintWidth = lineW + getLineEndPaintContribution(kind, leadingSpacing, w)
             appendWholeSegment(i, advance)
             lineWidth = finishLine(i + 1, 0, currentBreakPaintWidth)
             break lineLoop

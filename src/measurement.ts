@@ -16,9 +16,6 @@ const entryContextProperties = ['font', 'direction', 'fontKerning', 'fontStretch
 export type SegmentMetrics = {
   width: number
   emojiCount?: number
-  // Per following piece across a soft hyphen: true when the joined text measures
-  // narrower than the two pieces apart.
-  shapesAcrossSoftHyphen?: Map<string, boolean>
   breakableFitMode?: BreakableFitMode
   breakableFitAdvances?: number[] | null
   entryGeometry?: {
@@ -95,12 +92,13 @@ export type EngineProfile = {
   // ordinary text for now: Blink joins Arabic across a soft hyphen that Pretext
   // measures as separate segments, which the break before NEL was hiding, and
   // release Gecko draws NEL with no advance while its Canvas measures a space.
+  // WebKit's simple text path gives NEL no letter spacing, at either sign, and
+  // its complex path spaces it. A NEL control segment takes spacing after text
+  // or glue in WebKit's complex ranges, or before such text that starts with a
+  // combining mark. Preparation cannot see the page direction, so after complex
+  // text whose direction differs from the page's it keeps spacing Safari omits.
+  // Blink spaces NEL outside cursive runs.
   breakOnlyAfterNextLine: boolean
-  // WebKit's simple text path replaces a control character's advance after
-  // applying letter spacing, so NEL takes none there, at either sign. Its
-  // complex path spaces NEL like other characters. Blink spaces NEL outside
-  // cursive runs.
-  letterSpaceNextLine: boolean
   // WebKit moves a tab to the following stop when less than half a space would
   // remain before the next one (FontCascade::tabWidth).
   skipNarrowTabStops: boolean
@@ -303,7 +301,6 @@ export function getEngineProfile(language: BreakLanguage = 'root'): EngineProfil
     letterSpaceDiscretionaryHyphen: engine !== 'blink',
     unfitHyphenRetreat: engine === 'blink' ? 'reduced-width' : 'none',
     breakOnlyAfterNextLine: engine === 'webkit',
-    letterSpaceNextLine: engine !== 'webkit',
     skipNarrowTabStops: engine === 'webkit',
     inlineItemBreaks: engine === 'blink' ? 'joined-text' : engine === 'webkit' ? 'item-text' : 'item-boundary',
   }

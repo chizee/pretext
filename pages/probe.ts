@@ -479,6 +479,21 @@ function getFirstBreakMismatch(
   return null
 }
 
+// What a whole segment charges toward the line's fit width when the line ends
+// after it. Spaces and zero-width breaks hang, a soft hyphen charges its hyphen,
+// and other content charges its width and the letter-spacing gap after it,
+// except zero-width text. Tabs and hard breaks prepare with zero width.
+function getLineEndFitAdvance(prepared: PreparedTextWithSegments, segmentIndex: number): number {
+  const kind = prepared.kinds[segmentIndex]!
+  const width = prepared.widths[segmentIndex]!
+  if (kind === 'soft-hyphen') return prepared.discretionaryHyphenWidth
+  if (kind === 'space' || kind === 'preserved-space' || kind === 'zero-width-break') return 0
+  if (width === 0 && kind !== 'control') return 0
+  return prepared.letterSpacing !== 0 && prepared.spacingGraphemeCounts[segmentIndex]! > 0
+    ? width + prepared.letterSpacing
+    : width
+}
+
 function getBreakTrace(
   prepared: PreparedTextWithSegments,
   measuredFont: string,
@@ -530,7 +545,7 @@ function getBreakTrace(
     const unitWidth = measurePreparedSlice(prepared, unit.start, unit.end, measuredFont)
     const lineSliceWidth = measurePreparedSlice(prepared, lineStart, unit.end, measuredFont)
     const lineFitWidth = wholeSegment
-      ? lineSliceWidth - prepared.widths[segmentIndex]! + prepared.lineEndFitAdvances[segmentIndex]!
+      ? lineSliceWidth - prepared.widths[segmentIndex]! + getLineEndFitAdvance(prepared, segmentIndex)
       : lineSliceWidth
     const graphemeOrdinal = (graphemeOrdinalBySegment.get(segmentIndex) ?? 0) + 1
     graphemeOrdinalBySegment.set(segmentIndex, graphemeOrdinal)

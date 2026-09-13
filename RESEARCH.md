@@ -123,15 +123,16 @@ Under `word-break: keep-all`, Blink keeps a pair only when both sides are letter
 or numbers by general category and neither is SA. It tests UTF-16 code units and
 looks past one combining mark before the boundary, so it never keeps a symbol or a
 supplementary character, and it leaves every other pair to ICU's ordinary rules.
-So a listed letter such as `々`, `ゝ`, `〼`, `〵` or `ー` does not end a run in the
-Chromium profile, while punctuation such as `」`, `・` or `゛` does. Gecko's ICU4X
-keeps pairs by line-break class instead (AI, AL, ID, NU, HY, the Hangul classes and
-CJ), where a mark takes its base's class. It keeps `ー`, symbols such as `★`,
-supplementary ideographs and, after an ideograph, `〵` or an ideographic variation
-selector, but breaks after NS letters such as `々` or `〼`, and after `〵` following
-a closing bracket. `keepAllPairModel` picks Blink's rule, ICU4X's, or WebKit's,
-whose keep-all breaks only at spaces; newer WebKit source also breaks after opening,
-closing and other punctuation there, but not after letters.
+So a letter that cannot start a line, such as `々`, `ゝ`, `〼`, `〵` or `ー`, does not
+end a run in the Chromium profile, while punctuation such as `」`, `・` or `゛` does.
+Gecko's ICU4X keeps pairs by line-break class instead (AI, AL, ID, NU, HY, the
+Hangul classes and CJ), where a mark takes its base's class. It keeps `ー`, symbols
+such as `★`, supplementary ideographs and, after an ideograph, `〵` or an
+ideographic variation selector, but breaks after NS letters such as `々` or `〼`,
+and after `〵` following a closing bracket. `keepAllPairModel` picks Blink's rule,
+ICU4X's, or WebKit's, whose keep-all breaks only at spaces; newer WebKit source
+also breaks after opening, closing and other punctuation there, but not after
+letters.
 
 Where the engine does not keep a pair, Pretext ends a keep-all run where UAX #14
 allows a break between the two line-break classes. The classes come from a table

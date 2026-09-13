@@ -652,6 +652,20 @@ export function prepareRichInline(items: RichInlineItem[]): PreparedRichInline {
   } as InternalPreparedRichInline
 }
 
+// Emits a fragment covering a whole item, from its start to its source end.
+function collectWholeItem(
+  collectFragment: RichInlineFragmentCollector | undefined,
+  itemIndex: number,
+  item: PreparedRichInlineItem,
+  gapBefore: number,
+  occupiedWidth: number,
+): void {
+  collectFragment?.(itemIndex, gapBefore, occupiedWidth, cloneCursor(EMPTY_LAYOUT_CURSOR), {
+    segmentIndex: item.prepared.segments.length,
+    graphemeIndex: 0,
+  })
+}
+
 function stepRichInlineLine(
   flow: InternalPreparedRichInline,
   maxWidth: number,
@@ -667,23 +681,16 @@ function stepRichInlineLine(
   let remainingWidth = safeWidth
   let itemIndex = cursor.itemIndex
 
+  // Every `continue` moves on to the start of the next item.
   lineLoop:
-  while (itemIndex < flow.items.length) {
+  for (; itemIndex < flow.items.length; itemIndex++, cursor.segmentIndex = 0, cursor.graphemeIndex = 0) {
     const item = flow.items[itemIndex]
-    if (item === undefined) {
-      itemIndex++
-      cursor.segmentIndex = 0
-      cursor.graphemeIndex = 0
-      continue
-    }
+    if (item === undefined) continue
     if (
       !isLineStartCursor(cursor) &&
       cursor.segmentIndex === item.prepared.segments.length &&
       cursor.graphemeIndex === 0
     ) {
-      itemIndex++
-      cursor.segmentIndex = 0
-      cursor.graphemeIndex = 0
       continue
     }
 
@@ -691,13 +698,7 @@ function stepRichInlineLine(
     // turning their mere presence into a line. Their prior layout behavior is
     // unchanged; a following line can still expose their consumed source.
     if (!item.establishesLine) {
-      collectFragment?.(itemIndex, 0, 0, cloneCursor(EMPTY_LAYOUT_CURSOR), {
-        segmentIndex: item.prepared.segments.length,
-        graphemeIndex: 0,
-      })
-      itemIndex++
-      cursor.segmentIndex = 0
-      cursor.graphemeIndex = 0
+      collectWholeItem(collectFragment, itemIndex, item, 0, 0)
       continue
     }
 
@@ -705,33 +706,16 @@ function stepRichInlineLine(
     const atItemStart = isLineStartCursor(cursor)
 
     if (item.break === 'never') {
-      if (!atItemStart) {
-        itemIndex++
-        cursor.segmentIndex = 0
-        cursor.graphemeIndex = 0
-        continue
-      }
+      if (!atItemStart) continue
 
       const occupiedWidth = item.naturalWidth + item.extraWidth
       const totalWidth = gapBefore + occupiedWidth
       if (hasContent && totalWidth > remainingWidth) break lineLoop
 
-      collectFragment?.(
-        itemIndex,
-        gapBefore,
-        occupiedWidth,
-        cloneCursor(EMPTY_LAYOUT_CURSOR),
-        {
-          segmentIndex: item.prepared.segments.length,
-          graphemeIndex: 0,
-        },
-      )
+      collectWholeItem(collectFragment, itemIndex, item, gapBefore, occupiedWidth)
       hasContent = true
       lineWidth += totalWidth
       remainingWidth = safeWidth - lineWidth
-      itemIndex++
-      cursor.segmentIndex = 0
-      cursor.graphemeIndex = 0
       continue
     }
 
@@ -755,22 +739,10 @@ function stepRichInlineLine(
           (isLineStartCursor(item.lastRunStart) && !(hasContent && item.breakBefore))
         )
       ) {
-        collectFragment?.(
-          itemIndex,
-          gapBefore,
-          item.naturalWidth + item.extraWidth,
-          cloneCursor(EMPTY_LAYOUT_CURSOR),
-          {
-            segmentIndex: item.prepared.segments.length,
-            graphemeIndex: 0,
-          },
-        )
+        collectWholeItem(collectFragment, itemIndex, item, gapBefore, item.naturalWidth + item.extraWidth)
         hasContent = true
         lineWidth += totalWidth
         remainingWidth = safeWidth - lineWidth
-        itemIndex++
-        cursor.segmentIndex = 0
-        cursor.graphemeIndex = 0
         continue
       }
     }
@@ -781,19 +753,11 @@ function stepRichInlineLine(
       graphemeIndex: cursor.graphemeIndex,
     }
     let lineWidthForItem = stepPreparedLineGeometry(item.prepared, lineEnd, availableWidth)
-    if (lineWidthForItem === null) {
-      itemIndex++
-      cursor.segmentIndex = 0
-      cursor.graphemeIndex = 0
-      continue
-    }
+    if (lineWidthForItem === null) continue
     if (
       cursor.segmentIndex === lineEnd.segmentIndex &&
       cursor.graphemeIndex === lineEnd.graphemeIndex
     ) {
-      itemIndex++
-      cursor.segmentIndex = 0
-      cursor.graphemeIndex = 0
       continue
     }
 
@@ -881,9 +845,6 @@ function stepRichInlineLine(
       lineEnd.segmentIndex === item.prepared.segments.length &&
       lineEnd.graphemeIndex === 0
     ) {
-      itemIndex++
-      cursor.segmentIndex = 0
-      cursor.graphemeIndex = 0
       continue
     }
 
