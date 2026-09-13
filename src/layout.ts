@@ -800,9 +800,9 @@ export function layout(prepared: PreparedText, maxWidth: number, lineHeight: num
   return { lineCount, height: lineCount * lineHeight }
 }
 
-// Every reported line is built here, so widths are clamped at zero here. A
-// line's advance can be negative: the rest of a word after an emergency break
-// can hold only invisible characters and the word's kerning with a following
+// Reported widths are clamped at zero wherever a line is built. A line's
+// advance can be negative: the rest of a word after an emergency break can
+// hold only invisible characters and the word's kerning with a following
 // space, and letter spacing can be strongly negative. Line breaking keeps the
 // signed advance.
 function createLayoutLine(
@@ -905,11 +905,29 @@ export function measureLineStats(
 // the prepared text when container width is not the thing forcing wraps?".
 // Explicit hard breaks still count, so this returns the widest forced line.
 export function measureNaturalWidth(prepared: PreparedTextWithSegments): number {
-  let maxWidth = 0
-  walkPreparedLinesRaw(getInternalPrepared(prepared), Number.POSITIVE_INFINITY, width => {
-    if (width > maxWidth) maxWidth = width
-  })
-  return maxWidth
+  return measureLineStats(prepared, Number.POSITIVE_INFINITY).maxLineWidth
+}
+
+// Steps one streamed line from `start` into the result's cursors: the
+// normalized line start and the line end. Returns the reported width, or null
+// after the last line.
+function stepNextLine(
+  prepared: PreparedTextWithSegments,
+  start: LayoutCursor,
+  maxWidth: number,
+  lineStart: LayoutCursor,
+  lineEnd: LayoutCursor,
+): number | null {
+  const internal = getInternalPrepared(prepared)
+  lineEnd.segmentIndex = start.segmentIndex
+  lineEnd.graphemeIndex = start.graphemeIndex
+  const chunkIndex = normalizePreparedLineStart(internal, lineEnd)
+  if (chunkIndex < 0) return null
+
+  lineStart.segmentIndex = lineEnd.segmentIndex
+  lineStart.graphemeIndex = lineEnd.graphemeIndex
+  const width = stepPreparedLineGeometryFromChunk(internal, lineEnd, chunkIndex, maxWidth)
+  return width === null ? null : Math.max(0, width)
 }
 
 export function layoutNextLine(
@@ -917,28 +935,20 @@ export function layoutNextLine(
   start: LayoutCursor,
   maxWidth: number,
 ): LayoutLine | null {
-  const internal = getInternalPrepared(prepared)
-  const end = {
-    segmentIndex: start.segmentIndex,
-    graphemeIndex: start.graphemeIndex,
-  }
-  const chunkIndex = normalizePreparedLineStart(internal, end)
-  if (chunkIndex < 0) return null
-
-  const lineStartSegmentIndex = end.segmentIndex
-  const lineStartGraphemeIndex = end.graphemeIndex
-  const width = stepPreparedLineGeometryFromChunk(internal, end, chunkIndex, maxWidth)
+  const lineStart = { segmentIndex: 0, graphemeIndex: 0 }
+  const end = { segmentIndex: 0, graphemeIndex: 0 }
+  const width = stepNextLine(prepared, start, maxWidth, lineStart, end)
   if (width === null) return null
 
-  return createLayoutLine(
+  const text = buildLineTextFromRange(
     prepared,
     getLineTextCache(prepared),
-    width,
-    lineStartSegmentIndex,
-    lineStartGraphemeIndex,
+    lineStart.segmentIndex,
+    lineStart.graphemeIndex,
     end.segmentIndex,
     end.graphemeIndex,
   )
+  return { text, width, start: lineStart, end }
 }
 
 export function layoutNextLineRange(
@@ -946,26 +956,10 @@ export function layoutNextLineRange(
   start: LayoutCursor,
   maxWidth: number,
 ): LayoutLineRange | null {
-  const internal = getInternalPrepared(prepared)
-  const end = {
-    segmentIndex: start.segmentIndex,
-    graphemeIndex: start.graphemeIndex,
-  }
-  const chunkIndex = normalizePreparedLineStart(internal, end)
-  if (chunkIndex < 0) return null
-
-  const lineStartSegmentIndex = end.segmentIndex
-  const lineStartGraphemeIndex = end.graphemeIndex
-  const width = stepPreparedLineGeometryFromChunk(internal, end, chunkIndex, maxWidth)
-  if (width === null) return null
-
-  return createLayoutLineRange(
-    width,
-    lineStartSegmentIndex,
-    lineStartGraphemeIndex,
-    end.segmentIndex,
-    end.graphemeIndex,
-  )
+  const lineStart = { segmentIndex: 0, graphemeIndex: 0 }
+  const end = { segmentIndex: 0, graphemeIndex: 0 }
+  const width = stepNextLine(prepared, start, maxWidth, lineStart, end)
+  return width === null ? null : { width, start: lineStart, end }
 }
 
 // Rich layout API for callers that want the actual line contents and widths.
