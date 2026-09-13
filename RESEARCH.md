@@ -157,9 +157,10 @@ characters (`文”|文`), though not after `.”` before Hangul. Chromium's ICU
 Chinese pages treat `”` as CL and break there too (`다.”|라|고`).
 
 The bracket carry also kept CJK line-start prohibitions that `kinsokuStart` did
-not list, such as `〟`, `］`, `｡`, `〜` or `゛`, with the bracket. The set now holds
+not list, such as `〟`, `］`, `｡`, `〜` or `゛`, with the bracket. The check now covers
 every code point in Pretext's CJK ranges whose UAX #14 class forbids a break
-before it: CL, EX, NS and the non-extending CM U+3035. `Intl.Segmenter` joins
+before it, from the generated class table: CL, EX, NS and the non-extending CM
+U+3035. `Intl.Segmenter` joins
 some nonstarters, such as `゛` or `ヽ`, with the kana after them, so a piece's
 first code point decides whether it attaches to the preceding text. U+3000 is BA,
 but Chromium and Firefox hang or trim it at a line end, so it needs its own
