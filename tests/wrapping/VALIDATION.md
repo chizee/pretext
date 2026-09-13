@@ -52,6 +52,14 @@ and flat warm.
 `bun test` and `bun run check` pass. The baseline advances to `cc2328b`, and the
 ordinary snapshots were regenerated against it.
 
+Chrome and Safari benchmark snapshots were refreshed from this branch: three
+foreground runs each at DPR 2, visible and focused, with Chrome on the 2560x1440
+screen and Safari on the 2560x1440 screen (the parent branch's Safari runs used
+the 1440x2560 screen). Chrome reads `prepare()` at 8.50 ms (9.15 on the parent
+branch) and hot `layout()` at 0.0883 ms (0.0885); Safari reads 11.5 ms (11.0) and
+0.105 ms (0.105). Long-form corpus totals read 107.9 ms in Chrome (115.0) and 347
+ms in Safari (359).
+
 ## Small kana and ー in Chrome and Firefox
 
 This runtime change starts from main after #249. Chrome and Firefox now resolve
