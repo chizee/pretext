@@ -49,7 +49,7 @@ The two documented main API failures, `wrap-5123bf2f598e26a1` and `wrap-d100ee2c
 
 ## Faithful recipe reduction
 
-The new file has 1,065 source groups with correlated settings; 234 endpoint recipe groups replace 1,672 repeated codepoint profiles, and two explicit following-space grammars regenerate 32,076 original rows. Dyadic threshold sequences use exact start/step/count spans; arbitrary fractional thresholds remain literal numbers. U+FFF0 is a fixture-only codepoint slot, replaced before any input reaches preparation or the observer.
+`fixtures/retained.json` has 1,065 source groups with correlated settings; 234 endpoint recipe groups replace 1,672 repeated codepoint profiles, and two explicit following-space grammars regenerate 32,076 original rows. Dyadic threshold sequences use exact start/step/count spans; arbitrary fractional thresholds remain literal numbers. U+FFF0 is a fixture-only codepoint slot, replaced before any input reaches preparation or the observer.
 
 ## Provenance and curation
 
