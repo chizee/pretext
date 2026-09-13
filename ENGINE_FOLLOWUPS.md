@@ -93,6 +93,7 @@ Open engine work: decisions for the maintainer, known gaps and harness debt.
 - Record `Intl.Segmenter` word-likeness for emoji, U+2605 and digit strings in installed Safari and Firefox.
 - The iOS profile patch has no device evidence: iOS fonts, older iOS ICU without the Hebrew LB20a rule, EU alternative engines, and Edge's iPad desktop user agent.
 - On each new Safari, recheck WebKit changes that haven't shipped yet: first-glyph kinsoku and the 0.5ch tab minimum.
+- No canvas follows an element's own `lang`, a Worker's context, or a runtime Content-Language change. Add a short README note.
 - Safari page-language attribution left two things open: why Amiri `il` at a line start measures 2.544px or 7.416px, and 1,117 Japanese width-only differences. Revisit with the content-language decision.
 
 ## Harness and tooling
