@@ -1096,3 +1096,17 @@ unchanged; that runner reports whole milliseconds.
 Suite hash: `24ed06aa2d941776605cd68142ec305e60602143061111150d59dccc9fde3657`.
 Raw rows, frozen sources and the per-case loss table `lost.tsv` are in
 `/private/tmp/pretext-210-landing-20260911/full-vs-2b73992`.
+
+## Retained recipe reduction
+
+The retained JSON shrank from 4,261,040 to 1,635,525 bytes. The original 4,758
+profiles repeated 41,449 source records.
+
+The migration compared the complete expanded set with `a56d0f9`: 209,138 inputs
+before and after, zero additions, omissions, origin changes or family changes.
+Both sorted semantic sets have SHA-256
+`b6849c304ca383dbef03202952bb19878ed9217525ca687a9093feab3611e5fa`. This is an
+input-preservation audit, not a browser correctness claim. The separate
+maintained-oracle corrections described in [INVENTORY.md](INVENTORY.md)
+intentionally restore their original protocol and are not relabeled as unchanged
+inputs.

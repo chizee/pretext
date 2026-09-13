@@ -5,77 +5,35 @@ experiments. [INVENTORY.md](INVENTORY.md) records the behavioral obligations and
 their provenance; [VALIDATION.md](VALIDATION.md) records completed comparisons
 and limitations.
 
-```sh
-bun test
-bun run test:wrapping --browser=all
-bun run test:wrapping --suite=full --browser=all
-bun run test:wrapping:snapshot
-```
-
-The ordinary schedule runs all maintained accuracy, corpus, whitespace, keep-all,
-symbol, spacing and discretionary checks, plus explicit regressions and nearby
-controls. [ordinary.ts](fixtures/ordinary.ts) explains which behavioral dimensions
-matter. The full schedule adds the broad exploratory matrices. Both use the same
-case definitions and assertions; passing ordinary does not establish a full pass.
-
 The runner exports the pinned main revision in [baseline.json](baseline.json),
 freezes every source and the harness, and observes each case in the installed
-browser. The fixture context loads checked-in font bytes with verified hashes.
-Maintained cases use installed-font contexts in their original document language;
+browser. Maintained cases use installed-font contexts in their original document language;
 experiment fonts cannot override those fallback stacks. Each direction/context
-runs in a fresh document before Canvas preparation. Generic fonts inherit
-document language when resolved; changing `lang` between cases can otherwise
-leave an earlier font resolution in the Canvas context. Native element language
-and preparation locale remain separate inputs. Loading the same font through
-`FontFace` can also change Safari behavior.
+runs in a fresh document before Canvas preparation.
 
-Fixture pages use `en` as their document language. Without one, Chrome uses its
-app language and Firefox the macOS preferred language, while Safari matched `en`.
-Language changes native results in three ways. Chrome allows extra breaks around
-curly double quotes on Chinese pages. Safari allows extra breaks around curly
-quotes on pages without a language and in `en`, `zh-Hans` and `ko`, but not `ja`.
-Glyphs missing from the named font fall back to a language-specific font with
-different widths. Under `ja`, `zh-Hans` and `ko`, Safari and Firefox also shape
-some of the named font's own punctuation differently. The full schedule's
-`maintained/content-language` family records curly-quote, small-kana, wave-dash
-and newline breaks on `en`, `ja`, `ko`, `zh` and `zh-Hant` pages; none of its
-results is required. Pretext's OffscreenCanvas
-follows `<html lang>` in Chrome and Firefox, never in Safari. The case generator
-measures width recipes with a hidden canvas attached to the page, which inherits
-`<html lang>` in all three browsers. A detached canvas ignores it in all three:
-Chrome and Firefox measure in the machine language, and Safari passes no
-language, so its fallback follows the machine's preferred languages. An
-element's `lang=""` marks its language as unknown rather than inheriting the
-page's, and remains a reset input. Chrome resolves it to its app language, which
-the report records as `locale`, so these results can differ between machines.
-In their sources, Firefox maps it to its generic `x-unicode` font group and
-Safari passes no language. Firefox's fallback glyphs then follow the machine
-language too: on a Mac preferring `zh-Hans`, U+2167 under `lang=""` measured
-16px, as with no language, against 27.53px under `en`. Safari's matched `en`.
-No recorded empty-language row contains a fallback glyph, so no recorded result
-separates from `en` yet. Give standalone probe pages an explicit, non-empty
-`lang`.
+Fixture pages use `en` as their document language; [RESEARCH.md](../../RESEARCH.md)
+describes what page language changes.
 
 The environment guard starts after font readiness and before case generation or
 preparation. It records the page's start/end environment and latches observed
 changes; a DPR, visual scale or document-context change invalidates the run.
 Background correctness remains allowed. Snapshots also reject incompatible scales
 across contexts. See [DEVELOPMENT.md](../../DEVELOPMENT.md) for the stricter
-foreground benchmark rules and what screen metadata can establish.
+foreground benchmark rules.
 
 ## Gates and observations
 
 Maintained cases preserve their original modes, content widths, locale, browser
 scope, extraction method and tolerances. Their required metrics and the exact
-boundary-policy report obligations (#206/#208, #212/#213 and #214/#215) in
-[INVENTORY.md](INVENTORY.md) must pass even when main fails them. Elsewhere, the gate rejects lost passing main metrics and
+filed-report obligations in [INVENTORY.md](INVENTORY.md) must pass even when main fails them. Elsewhere, the gate rejects lost passing main metrics and
 lost observation coverage. All source execution errors fail the run. A candidate
-fix does not offset an unrelated regression. The twelve native rich-inline
-#210/#211 reproductions also require `richHeight` to pass. The two exact flat
-reproductions require native height, line count and API agreement; the visible
-text also requires source placement.
-Two additional native rich cases retain exact-fit ZWSP and forced-overflow WJ
-admission. Their `richHeight` must pass too.
+fix does not offset an unrelated regression. Differences found only outside the
+suite, in headless probes or research families, don't block a change that loses
+nothing in the installed gate. Name them in the PR and [VALIDATION.md](VALIDATION.md),
+and list the ones worth fixing in [ENGINE_FOLLOWUPS.md](../../ENGINE_FOLLOWUPS.md).
+A candidate that changes the harness normalization contract gates from its own
+harness and also runs once from main's harness, so contract-masked losses stay
+visible.
 
 For fractional CSS line heights, a separate two-line strut observes the browser’s
 used line-box advance. This keeps Safari’s integer rounding out of the wrapping
@@ -102,6 +60,8 @@ method, own height, resolved line-height, every grapheme/scalar rectangle and
 whole-content rectangles. Extraction count comes from that experiment's height, not the number
 of inferred source groups. Normalizing source or inserting spans can change
 wrapping; neither experiment replaces the original paragraph's observations.
+Fresh comparisons run both library versions against the same observer; changing
+an observer is not a library accuracy improvement.
 
 Boundary comparisons use all positive rectangles of a visible source scalar. A
 carried zero rectangle cannot move it to an earlier line, and positive rectangles
@@ -128,17 +88,10 @@ Version 1 reports retain their recorded assessments and legacy source groups.
 Those groups lack the extraction's own geometry and cannot be converted into
 version 2 observations. Reassessing such a record leaves selected extraction
 count/boundaries unobserved; original paragraph metrics can still be assessed.
-Canonical accuracy and corpus cases retain their height-only scope. Corpus
-native paragraphs use documented whitespace normalization while the candidate
-still receives the original source.
 
 Documented normal-mode normalization follows the observed browser's segment
-break transformation. In Chrome and Firefox, a collapsible run containing LF is
-removed when a ZWSP immediately precedes or follows it; in Safari it becomes
-SPACE. Adjacency uses the engine's own run: Chrome's holds SPACE, TAB, LF and CR;
-Firefox's holds SPACE, TAB and LF, continues through SHY and bidi controls, and
-leaves out a last SPACE before a combining mark. Characters outside that run,
-such as FF, still collapse like SPACE. The source contract, source placement and
+break transformation, as [RESEARCH.md](../../RESEARCH.md) describes per engine.
+The source contract, source placement and
 normalized native paragraphs all use that form. Normalized native text renders
 like its raw source when the run holds only SPACE, TAB and LF; the documented
 form still approximates CR and FF as SPACE, and does not model Firefox
@@ -146,15 +99,7 @@ collapsing across SHY or bidi controls when no ZWSP removes the run. Firefox's
 East Asian segment break rules are not part of the documented form, so Firefox
 ja/zh corpus paragraphs are observed without them.
 
-Twelve explicit ZWSP item cases also measure a native paragraph made from the
-original same-font inline spans. `richHeight` compares that height with the rich
-public walk, independently of the flat paragraph and API consistency. This small
-normal-mode protocol does not establish general styled-inline shaping or native
-rich source boundaries. Other rich inputs retain their existing API contracts.
-
-Ambiguous or invisible rectangles cannot establish source ownership. Generic
-Range extents do not establish advances with negative spacing, preserved
-whitespace or shaping controls. Generic selected-hyphen observation is restricted
+Generic selected-hyphen observation is restricted
 to the verified normal-word-break `a\u00adb` protocol; eight maintained discretionary
 cases also check exact expected text and line widths with their tighter tolerance.
 Two exact Safari paint witnesses additionally retain the opening-quote marker
@@ -212,15 +157,13 @@ Reports go under `.artifacts/wrapping/`, or `--output=/new/directory`:
 Checked-in snapshots keep totals, provenance and mismatches; raw
 successful rows are available in the run artifact. `/accuracy` displays those
 snapshots. Publication requires a passing run with the numeric checks enabled;
-failed run artifacts remain available for diagnosis. Individual corpus/probe/font tools remain detailed investigations,
-including alternate extractors and slices; they are not a second acceptance suite.
+failed run artifacts remain available for diagnosis.
 
 Add a counterexample with its reproducer, nearby controls and relevant dimensions.
 Do not retain a whole discovery crossproduct merely because it found that case.
 Use faithful finite recipes for broad investigations and preserve exact threshold
 widths. Never delete a valid failure to improve a score. Advance pinned main only
-after reviewing per-case changes. Runtime performance and packaging checks remain
-separate from this correctness suite.
+after reviewing per-case changes.
 
 The pin identifies a source revision, not a list of disabled tests. Keep it for a
 test-only merge. When accepting a bug fix, add a narrow required assertion,
