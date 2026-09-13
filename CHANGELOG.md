@@ -9,9 +9,9 @@
 - A zero-width space at the start of a paragraph or after a hard line break no longer disappears when the following text wraps to the next line (#227).
 - Lines can now break after `?`, and after `!` or other exclamation punctuation such as `؟` and `۔`, before a following word, as browsers do, including after a space or zero-width space. Chrome and Safari still keep `!` with a following ASCII letter or digit; Firefox breaks there too (#228).
 - In Safari, a combining mark after a zero-width space at the start of the text, at the start of a rich-inline item, or after a line break now stays with that zero-width space (#228).
-- In Chrome, text prepared after changing `<html lang>` now uses the fonts for the new language, even when the font string is unchanged.
+- In Chrome, text prepared after changing `<html lang>` now uses the fonts for the new language, even when the font string is unchanged (#230).
 - Figure spaces (U+2007) now keep adjacent text on the same line, like no-break spaces, as browsers do (#232).
-- Lines can now break after `?` before `$`, `%`, `+`, `\`, `-` or `|`, after `!` or `?` before a symbol such as `©`, `¿` or `€`, and after the Arabic semicolon `؛` before a word, as browsers do. Firefox still keeps `?` with a following `-` or `|`. In Chrome, `ー` after `！` or `？` can now start a line (#233).
+- Lines can now break after `?` before `$`, `%`, `+`, `\`, `-` or `|`, after `!` or `?` before a symbol such as `©`, `¿` or `€`, and after the Arabic semicolon `؛` before a word, as browsers do. Firefox still keeps `?` with a following `-` or `|` (#233).
 - A zero-width joiner now keeps the character after it on the same line, except right after a space and in CJK text (#233).
 - In Chrome and Safari, a hyphen or dash such as U+2010 HYPHEN, U+2012 FIGURE DASH or U+2013 EN DASH at the start of a word now stays with a following letter of an alphabetic script, such as Latin, Cyrillic, Arabic, Hebrew or Thai. For `-`, only letters outside Latin-1 count (#233).
 - In Chrome, lines can now break between a fullwidth closing bracket such as `」` or `）` and a following ideograph, kana or Hangul syllable, as Chrome does (#234).

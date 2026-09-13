@@ -5,7 +5,6 @@ Compact taxonomy for interpreting canary mismatches.
 Use this when a corpus or probe disagrees with the engine and the question is
 "what class of problem is this?" rather than "what width missed?"
 
-`RESEARCH.md` stays the detailed exploration log.
 The `corpora/*-step10.json` snapshots are the current scorecard.
 This file is the shared vocabulary for deciding what kind of work should happen next.
 
@@ -14,10 +13,6 @@ Useful command:
 ```sh
 bun run corpus-taxonomy --id=ja-rashomon 330 450
 ```
-
-That runner is intentionally rough. It now batches widths inside one corpus page load
-and is there to turn repeated browser diagnostics into a steering summary, not to
-replace manual judgment on a new mismatch.
 
 ## Categories
 
@@ -51,7 +46,6 @@ Typical signs:
 
 Typical response:
 - fix preprocessing / break-kind modeling
-- do not patch `layout()`
 
 Examples:
 - early Gatsby paragraph-newline drift
@@ -106,7 +100,6 @@ Typical response:
 - avoid broad heuristics unless the class repeats across corpora
 
 Examples:
-- remaining Arabic fine-width field after the coarse corpus was cleaned
 - small Japanese and Thai one-line misses
 
 ### `shaping-context`
@@ -140,7 +133,7 @@ Typical response:
 - avoid script heuristics until the font story is clean
 
 Examples:
-- historical `system-ui` mismatch
+- `system-ui` mismatch ([PLATFORM_BUGS.md](../PLATFORM_BUGS.md))
 - sampled Myanmar miss on `Myanmar Sangam MN`
 
 ### `diagnostic-sensitivity`
@@ -150,15 +143,10 @@ The mismatch may be partly in the probe, extractor, or environment rather than t
 Typical signs:
 - `span` vs `range` extractors disagree
 - a short isolated probe does not reproduce the corpus mismatch
-- mixed-display or mixed-zoom runs disagree
 
 Typical response:
 - re-run with explicit extractor/method/environment
 - do not change the engine until the probe is trustworthy
-
-Examples:
-- former mixed-app `710px` soft-hyphen case
-- old Arabic span-probe drift before the RTL `Range` path
 
 ## Steering Rules
 
@@ -169,13 +157,3 @@ When a new mismatch shows up:
 3. If a semantic merge/split fixes multiple widths cleanly, classify as `boundary-discovery` or `glue-policy`.
 4. If repeated clean corpora still miss after good preprocessing, escalate to `shaping-context`.
 5. If only one font family or fallback stack misses, classify as `font-mismatch`.
-
-## Current Frontier
-
-The main current steering classes are:
-- Japanese: mostly `edge-fit` plus some `shaping-context`
-- Myanmar: mostly `boundary-discovery` / `glue-policy`, with some remaining local disagreement that is not yet a safe keep
-- Mixed app text: currently exact again; keep as a product-shaped regression canary
-- Arabic long-form: coarse field is clean; remaining fine field is mostly `edge-fit`
-- Chinese: mostly `glue-policy` around punctuation/quote clusters, plus some Chromium-only edge behavior
-- Urdu: currently behaving more like `boundary-discovery` / shaping-sensitive break policy than dirty data or simple edge-fit

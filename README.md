@@ -70,8 +70,6 @@ walkLineRanges(prepared, 320, line => { if (line.width > maxW) maxW = line.width
 // maxW is now the widest line — the tightest container width that still fits the text! This multiline "shrink wrap" has been missing from web
 ```
 
-The range APIs return positions and widths without allocating text strings. “Materializing” a range builds the line's text only when needed.
-
 - `layoutNextLineRange()` lets you route text one row at a time when width changes as you go:
 
 ```ts
@@ -94,11 +92,9 @@ while (true) {
 }
 ```
 
-This usage allows rendering to canvas, SVG, WebGL and (eventually) server-side. See the `/demos/dynamic-layout` demo for a richer example.
+See the `/demos/dynamic-layout` demo for a richer example.
 
-For hyphenation, insert soft hyphens before calling `prepare()` or `prepareWithSegments()`. They stay invisible unless the line breaks there, in which case it ends with `-`. A soft hyphen at the end of the paragraph is consumed without painting a hyphen. Pretext doesn't insert soft hyphens for you. For mixed-language or user-generated app text, prefer conservative, locale-aware insertion over aggressive pattern hyphenation.
-
-At very narrow widths, Pretext may wrap text containing soft hyphens differently from the browser. Safari can overflow a prefix plus hyphen, while Chromium and Gecko may move part of the prefix to another line.
+For hyphenation, insert soft hyphens before calling `prepare()` or `prepareWithSegments()`. They stay invisible unless the line breaks there, in which case it ends with `-`. Pretext doesn't insert soft hyphens for you. For mixed-language or user-generated app text, prefer conservative, locale-aware insertion over aggressive pattern hyphenation.
 
 To lay out text with mixed fonts, code spans, mentions, or chips, use `@chenglou/pretext/rich-inline`:
 
@@ -117,11 +113,7 @@ walkRichInlineLineRanges(prepared, 320, range => {
 })
 ```
 
-Pass a flat list of text items. Keep leading and trailing spaces; the helper collapses repeated spaces to one. Use `extraWidth` for padding and borders, and `break: 'never'` to keep an item on one line. Only `white-space: normal` is supported. This is not a general CSS inline formatting engine.
-
-Fragment and cursor `itemIndex` values refer to that original list, including when it contains empty items. A collapsed boundary space uses the first space's font and letter spacing; `gapBefore` can be zero or negative. Zero-width content can still occupy a line and carry a break opportunity.
-
-In Chrome and Safari, items break where the text they join has a break opportunity, not at every item boundary. Safari finds breaks inside each span from that span's own text, and Pretext follows it there, so a Thai, Lao, Khmer or Myanmar word split across items wraps like Safari's spans rather than like one text node. In Firefox, and in engines Pretext doesn't recognize, every item boundary is still a break opportunity, so punctuation that starts an item or the rest of a split word can wrap there where Firefox keeps it with the text before. Each item is measured on its own, so kerning across a boundary isn't included: Chrome and Firefox shape neighboring same-font spans together and Safari doesn't, which can move a wrap by about a pixel.
+Pass a flat list of text items. Only `white-space: normal` is supported. This is not a general CSS inline formatting engine.
 
 ### API Glossary
 
@@ -219,15 +211,10 @@ setLocale(locale?: string): void // optional (by default we use the current loca
 ```
 
 Notes:
-- `PreparedText` is the opaque fast-path handle. `PreparedTextWithSegments` is the richer manual-layout handle.
 - `LayoutCursor` is a segment/grapheme cursor, not a raw string offset.
 - `layout()` with an empty string returns `{ lineCount: 0, height: 0 }`. Browsers still size an empty block to one `line-height`, so clamp with `Math.max(1, lineCount) * lineHeight` if you need that behavior.
-- If you're drawing mixed bidi text, like English and Arabic, `prepareWithSegments()` includes `segLevels`: approximate bidi levels for each text segment, or `null` when no bidi metadata is needed. Levels describe direction and nesting for drawing; they don't affect where lines wrap. Base direction and weak/neutral state restart at Unicode bidi paragraph separators in the normalized text. In `pre-wrap`, normalized newlines start fresh paragraphs; in `normal`, ASCII newlines collapse to spaces first, or disappear next to a zero-width space in Chrome and Firefox. Tabs and U+2028 LINE SEPARATOR do not restart paragraph direction. This is not a full Unicode Bidirectional Algorithm implementation.
+- If you're drawing mixed bidi text, like English and Arabic, `prepareWithSegments()` includes `segLevels`: approximate bidi levels for each text segment, or `null` when no bidi metadata is needed. Levels describe direction and nesting for drawing; they don't affect where lines wrap. This is not a full Unicode Bidirectional Algorithm implementation.
 - Segment widths are browser-canvas widths for line breaking. They aren't enough to position individual characters correctly in Arabic or mixed bidi text.
-- In Safari, a word keeps its kerning with a following space. When a narrow width breaks such a word just before invisible characters, such as a word joiner before the space, the line holding them can have a slightly negative advance, as in WebKit's own line layout. Strongly negative `letterSpacing` can do the same. Line breaking uses that advance, but a line's reported `width` is clamped at 0.
-- If a soft hyphen wins the break, materialized line text includes the visible trailing `-`.
-- `measureNaturalWidth()` returns the widest forced line. Hard breaks still count.
-- `prepare()` and `prepareWithSegments()` do horizontal-only work. `lineHeight` stays a layout-time input.
 
 ## Caveats
 
@@ -239,14 +226,8 @@ Pretext doesn't try to be a full font rendering engine (yet?). It currently targ
 - `letter-spacing` as a numeric pixel value passed to `prepare()` / `prepareWithSegments()`
 - Tabs follow the default browser-style `tab-size: 8`
 - In `pre-wrap`, Pretext treats a lone `\r` as a line break, but browsers don't. Normalize `\r` to `\n` in the text you render, not just the text you measure.
-- `{ wordBreak: 'keep-all' }` is supported too. It behaves like you'd expect for CJK/Hangul and no-space mixed Latin/numeric/CJK text, while keeping the same `overflow-wrap: break-word` fallback for overlong runs.
 - `system-ui` and `-apple-system` are unsafe for `layout()` accuracy on macOS. Use a named font. See the [platform bug ledger](PLATFORM_BUGS.md) for the Chrome and Firefox issues.
-- Emoji next to punctuation can still wrap differently from the browser.
-- A paragraph containing only zero-width spaces (ZWSP) occupies one line. A ZWSP at the start of a paragraph or after a hard break gets its own line when the text after it doesn't fit beside it. Other ZWSP beside text, whitespace or hard breaks can still wrap differently from the browser. The rich-inline helper preserves standalone ZWSP items, but still inherits the flat text engine's wrapping limits inside each item.
-- In `normal`, Chrome and Firefox remove a newline, and the spaces and tabs around it, when a ZWSP is right before or after them; Safari turns it into a space. Pretext follows the browser it runs in, except across rich-inline items. Firefox also removes newlines between Chinese or Japanese characters, which Pretext still turns into spaces, so such text can wrap differently there.
-- Some fonts, such as Shantell Sans, can produce different line breaks inside long words in Pretext and the browser.
 - Page language changes fonts and line breaks, and without `lang` Chrome and Firefox use the browser's or system's language. A generic font like `sans-serif`, or a character missing from a named font, may use a different font from the one Pretext measures, and curly quotes can wrap differently per language. Set `lang` on `<html>`, use a named font that covers your text, and check the result in your browser. If you change `<html lang>`, prepare your text again; existing prepared handles keep the widths and line-break rules from before the change.
-- In Chrome, text is measured under the page direction (`<html dir>`) from when Pretext first measured, or last saw `<html lang>` change. Text whose direction differs from the page, like an Arabic paragraph on an LTR page, can wrap slightly differently around brackets and other neutral characters.
 - Runtime requires `Intl.Segmenter`, Canvas 2D text measurement, and Unicode property escapes (`\p{...}`). Browsers without these features aren't supported. Without Unicode property escapes, Pretext can't load and throws a `SyntaxError`.
 - Pretext uses the canvas `font` string. Separate CSS settings such as `font-optical-sizing`, `font-feature-settings`, and `font-variation-settings` aren't supported. Variable-font settings only apply when expressed through that string, such as font weight.
 - Pass font sizes in px. If your CSS sizes text in `rem` or `em`, resolve them to px once, higher up in your app (for example, when the root font size changes), and pass that string to Pretext.

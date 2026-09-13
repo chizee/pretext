@@ -5,17 +5,11 @@ line-prefix measurements differ. It is development tooling, not part of the
 library's layout path. General measurement pitfalls belong in
 [RESEARCH.md](RESEARCH.md#reading-browser-output).
 
-Run `bun run font-probe --browser=chrome --output=/tmp/font-probe.json`, or open
-`/font-probe` after `bun start`. Safari and Firefox are also accepted. The tool
-uses the Google Fonts request from [#195](https://github.com/chenglou/pretext/issues/195)
+The tool uses the Google Fonts request from [#195](https://github.com/chenglou/pretext/issues/195)
 and fails if the requested face is absent. That live URL does not pin a font
 revision; a fallback font is not valid evidence.
 
-The probes compare whole-run Canvas and DOM widths, isolated graphemes, separately
-measured prefixes, prefixes inside the unchanged DOM text node, and Canvas prefixes
-with one following grapheme retained. A language-matched HTML canvas tests font
-selection separately. Repeated-letter controls sample 48 nearby wrap thresholds.
-These are diagnostic models, not alternative public line breakers.
+Repeated-letter controls sample 48 nearby wrap thresholds.
 
 ## Shantell Sans
 
@@ -37,12 +31,7 @@ mattered, but the browsers did not use it alike:
 | Reshape each line prefix | Insufficient for Shantell | 42/48 for each Shantell face |
 
 These results support a contextual fit model for the tested inputs, not arbitrary
-shaping, exact painted widths, or an unconditional browser policy. A font-name
-correction would conceal the missing measurement information.
-
-The repeated-letter extractor ignores Safari's extra zero-width rectangle at a
-wrap boundary while keeping one native text node. That rule does not generalize
-to controls or combining marks. Inserting grapheme spans can itself change shaping.
+shaping, exact painted widths, or an unconditional browser policy.
 
 ## Language context
 
@@ -51,14 +40,15 @@ versus 106.983px in the default offscreen canvas. An HTML canvas with `lang=ja`
 restored 114.867px. Chrome showed the same kind of difference; named Times New
 Roman controls agreed in both browsers.
 
-Safari's language-matched canvas still measured 106.972px against the DOM's
-114.859px; its named-font control agreed. Matching `lang` alone is not a
+Safari's language-matched canvas, which the probe never attaches to the page,
+still measured 106.972px against the DOM's 114.859px; its named-font control
+agreed. Safari measures a detached `<canvas lang>` with no language
+([PLATFORM_BUGS.md](PLATFORM_BUGS.md)), and Pretext's OffscreenCanvas never
+follows the page language there, so matching `lang` alone is not a
 cross-browser solution.
 
 The [Canvas text-style specification](https://html.spec.whatwg.org/multipage/canvas.html#text-styles)
-includes language context. Pretext's `setLocale()` controls word segmentation,
-not Canvas font language. If measurements gain language context, cached
-measurements for different languages must stay separate.
+includes language context.
 
 In headless Chromium 147, `20px "Helvetica Neue"` measured `骨直中文` at 80px under
 `<html lang=en>`. After switching to `ko`, assigning the same font string to that
@@ -66,11 +56,6 @@ OffscreenCanvas context still gave 80px; a new context and the DOM gave 69.2px.
 Preparation therefore starts with a new context and empty caches after the page
 language changes. Headless WebKit 26.4's OffscreenCanvas gave 80px in both
 languages.
-
-Chromium also caches shaped text per canvas. With the Amiri fixture at 24px, a
-new context measured `ב(` at 24.50px (DOM 24.52px), but 19.63px after measuring
-`(` alone first. Widths in one context can depend on what it measured earlier;
-see [RESEARCH.md](RESEARCH.md) for why the context survives `clearCache()`.
 
 ## Firefox joined Arabic advances
 
@@ -105,7 +90,3 @@ Per-grapheme ZWJ forms recover the joined advances for Noto Naskh Arabic and for
 the system Arabic font behind Latin font stacks. Amiri and Noto Nastaliq Urdu are
 out of reach: most widths still fail, or the gate admits wrong partitions. A
 Firefox rule therefore needs the gate and a fallback to isolated widths per font.
-
-These probes did not retest the Retina emoji or `system-ui` bugs in
-[PLATFORM_BUGS.md](PLATFORM_BUGS.md). The September 3 Firefox capture used DPR 1;
-do not use those results to judge Retina-specific bugs.
