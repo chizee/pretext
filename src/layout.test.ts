@@ -809,11 +809,10 @@ describe('boundary-policy regressions', () => {
   test('the WebKit profile keeps NEL with the content before it, breaks after it and gives it no letter spacing', async () => {
     const { getEngineProfile } = await import('./measurement.ts')
     const profile = getEngineProfile()
-    const previous = [profile.breakOnlyAfterNextLine, profile.letterSpaceNextLine, profile.keepAllPairModel] as const
+    const previous = [profile.breakOnlyAfterNextLine, profile.keepAllPairModel] as const
     // Blink and Gecko keep NEL as ordinary text.
     expect(prepareWithSegments('zz ab\u0085cd', FONT).kinds).not.toContain('control')
     profile.breakOnlyAfterNextLine = true
-    profile.letterSpaceNextLine = false
     profile.keepAllPairModel = 'webkit-spaces'
     try {
       const lines = (text: string, width: number, options?: { whiteSpace?: 'pre-wrap', letterSpacing?: number }) => {
@@ -877,7 +876,7 @@ describe('boundary-policy regressions', () => {
       // A preserved space does not hang after a NEL that already overflows.
       expect(lines('a\u0085 b', nel - 0.5, { whiteSpace: 'pre-wrap', letterSpacing: 1 }).map(line => line.text)).toEqual(['a', '\u0085', ' ', 'b'])
     } finally {
-      [profile.breakOnlyAfterNextLine, profile.letterSpaceNextLine, profile.keepAllPairModel] = previous
+      [profile.breakOnlyAfterNextLine, profile.keepAllPairModel] = previous
     }
   })
 

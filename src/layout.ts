@@ -50,7 +50,6 @@ import {
 } from './line-break.js'
 import {
   buildLineTextFromRange,
-  clearLineTextCaches,
   getLineTextCache,
 } from './line-text.js'
 
@@ -60,8 +59,6 @@ declare const preparedTextBrand: unique symbol
 
 type PreparedCore = {
   widths: number[] // Segment widths, e.g. [42.5, 4.4, 37.2]
-  lineEndFitAdvances: number[] // Width contribution when a line ends after this segment
-  lineEndPaintAdvances: number[] // Painted contribution before terminal line-end letter-spacing
   kinds: SegmentBreakKind[] // Break behavior per segment, e.g. ['text', 'space', 'text']
   simpleLineWalkFastPath: boolean // Normal text can use the simpler old line walker across all layout APIs
   segLevels: Int8Array | null // Rich-path bidi metadata for custom rendering; layout() never reads it
@@ -146,8 +143,6 @@ function createEmptyPrepared(includeSegments: boolean): InternalPreparedText | P
   if (includeSegments) {
     return {
       widths: [],
-      lineEndFitAdvances: [],
-      lineEndPaintAdvances: [],
       kinds: [],
       simpleLineWalkFastPath: true,
       segLevels: null,
@@ -165,8 +160,6 @@ function createEmptyPrepared(includeSegments: boolean): InternalPreparedText | P
   }
   return {
     widths: [],
-    lineEndFitAdvances: [],
-    lineEndPaintAdvances: [],
     kinds: [],
     simpleLineWalkFastPath: true,
     segLevels: null,
@@ -424,8 +417,6 @@ function measureAnalysis(
   }
 
   const widths: number[] = []
-  const lineEndFitAdvances: number[] = []
-  const lineEndPaintAdvances: number[] = []
   const kinds: SegmentBreakKind[] = []
   let simpleLineWalkFastPath = !hasLetterSpacing
   const segStarts = includeSegments ? [] as number[] : null
@@ -464,19 +455,12 @@ function measureAnalysis(
     const nextKind = analysis.kinds[next]!
     if (nextKind !== 'text' && nextKind !== 'glue') return false
     const after = analysis.texts[next]!
-    const beforeMetrics = previousJoinableMetrics!
-    const shapesAcross = beforeMetrics.shapesAcrossSoftHyphen ??= new Map()
-    let result = shapesAcross.get(after)
-    if (result === undefined) {
-      const joined = before + after
-      const apart =
-        getCorrectedSegmentWidth(before, beforeMetrics, emojiCorrection) +
-        getCorrectedSegmentWidth(after, getSegmentMetrics(after, cache), emojiCorrection)
-      const together = getCorrectedSegmentWidth(joined, getSegmentMetrics(joined, cache), emojiCorrection)
-      result = apart - together > engineProfile.lineFitEpsilon
-      shapesAcross.set(after, result)
-    }
-    return result
+    const joined = before + after
+    const apart =
+      getCorrectedSegmentWidth(before, previousJoinableMetrics!, emojiCorrection) +
+      getCorrectedSegmentWidth(after, getSegmentMetrics(after, cache), emojiCorrection)
+    const together = getCorrectedSegmentWidth(joined, getSegmentMetrics(joined, cache), emojiCorrection)
+    return apart - together > engineProfile.lineFitEpsilon
   }
 
   function getEntryGeometry(
@@ -512,8 +496,6 @@ function measureAnalysis(
   function pushMeasuredSegment(
     text: string,
     width: number,
-    lineEndFitAdvance: number,
-    lineEndPaintAdvance: number,
     kind: SegmentBreakKind,
     start: number,
     breakableFitAdvance: number[] | null,
@@ -525,8 +507,6 @@ function measureAnalysis(
       simpleLineWalkFastPath = false
     }
     widths.push(width)
-    lineEndFitAdvances.push(lineEndFitAdvance)
-    lineEndPaintAdvances.push(lineEndPaintAdvance)
     kinds.push(kind)
     segStarts?.push(start)
     breakableFitAdvances.push(breakableFitAdvance)
@@ -568,18 +548,6 @@ function measureAnalysis(
       spacingGraphemeCount,
       letterSpacing,
     )
-    const baseLineEndFitAdvance =
-      kind === 'space' || kind === 'preserved-space' || kind === 'zero-width-break'
-        ? 0
-        : width
-    const lineEndFitAdvance =
-      baseLineEndFitAdvance === 0
-        ? 0
-        : baseLineEndFitAdvance + (spacingGraphemeCount > 0 ? letterSpacing : 0)
-    const lineEndPaintAdvance =
-      kind === 'space' || kind === 'zero-width-break'
-        ? 0
-        : width
 
     if (allowOverflowBreaks && text.length > 1) {
       let fitMode: BreakableFitMode = 'sum-graphemes'
@@ -611,8 +579,6 @@ function measureAnalysis(
       pushMeasuredSegment(
         text,
         width,
-        lineEndFitAdvance,
-        lineEndPaintAdvance,
         kind,
         start,
         fitAdvances,
@@ -627,8 +593,6 @@ function measureAnalysis(
     pushMeasuredSegment(
       text,
       width,
-      lineEndFitAdvance,
-      lineEndPaintAdvance,
       kind,
       start,
       null,
@@ -647,8 +611,6 @@ function measureAnalysis(
       pushMeasuredSegment(
         segText,
         0,
-        discretionaryHyphenWidth,
-        discretionaryHyphenWidth,
         segKind,
         segStart,
         null,
@@ -664,7 +626,7 @@ function measureAnalysis(
 
     if (segKind === 'hard-break') {
       const endSegmentIndex = widths.length
-      pushMeasuredSegment(segText, 0, 0, 0, segKind, segStart, null, null, 0)
+      pushMeasuredSegment(segText, 0, segKind, segStart, null, null, 0)
       chunks.push({
         startSegmentIndex: chunkStartSegmentIndex,
         endSegmentIndex,
@@ -677,8 +639,6 @@ function measureAnalysis(
     if (segKind === 'tab') {
       pushMeasuredSegment(
         segText,
-        0,
-        0,
         0,
         segKind,
         segStart,
@@ -698,12 +658,10 @@ function measureAnalysis(
       const previousKind = mi > 0 ? analysis.kinds[mi - 1] : undefined
       const nextText = mi + 1 < analysis.len ? analysis.texts[mi + 1]! : ''
       const takesLetterSpacing = hasLetterSpacing && (
-        engineProfile.letterSpaceNextLine ||
         ((previousKind === 'text' || previousKind === 'glue') && needsComplexTextPath(analysis.texts[mi - 1]!)) ||
         (leadingCombiningMarkRe.test(nextText) && needsComplexTextPath(nextText))
       )
-      const spacing = takesLetterSpacing ? letterSpacing : 0
-      pushMeasuredSegment(segText, width, width + spacing, width, segKind, segStart, null, null, takesLetterSpacing ? 1 : 0)
+      pushMeasuredSegment(segText, width, segKind, segStart, null, null, takesLetterSpacing ? 1 : 0)
       continue
     }
 
@@ -750,8 +708,6 @@ function measureAnalysis(
   if (segments !== null) {
     return {
       widths,
-      lineEndFitAdvances,
-      lineEndPaintAdvances,
       kinds,
       simpleLineWalkFastPath,
       segLevels,
@@ -769,8 +725,6 @@ function measureAnalysis(
   }
   return {
     widths,
-    lineEndFitAdvances,
-    lineEndPaintAdvances,
     kinds,
     simpleLineWalkFastPath,
     segLevels,
@@ -846,9 +800,9 @@ export function layout(prepared: PreparedText, maxWidth: number, lineHeight: num
   return { lineCount, height: lineCount * lineHeight }
 }
 
-// Every reported line is built here, so widths are clamped at zero here. A
-// line's advance can be negative: the rest of a word after an emergency break
-// can hold only invisible characters and the word's kerning with a following
+// Reported widths are clamped at zero wherever a line is built. A line's
+// advance can be negative: the rest of a word after an emergency break can
+// hold only invisible characters and the word's kerning with a following
 // space, and letter spacing can be strongly negative. Line breaking keeps the
 // signed advance.
 function createLayoutLine(
@@ -951,11 +905,29 @@ export function measureLineStats(
 // the prepared text when container width is not the thing forcing wraps?".
 // Explicit hard breaks still count, so this returns the widest forced line.
 export function measureNaturalWidth(prepared: PreparedTextWithSegments): number {
-  let maxWidth = 0
-  walkPreparedLinesRaw(getInternalPrepared(prepared), Number.POSITIVE_INFINITY, width => {
-    if (width > maxWidth) maxWidth = width
-  })
-  return maxWidth
+  return measureLineStats(prepared, Number.POSITIVE_INFINITY).maxLineWidth
+}
+
+// Steps one streamed line from `start` into the result's cursors: the
+// normalized line start and the line end. Returns the reported width, or null
+// after the last line.
+function stepNextLine(
+  prepared: PreparedTextWithSegments,
+  start: LayoutCursor,
+  maxWidth: number,
+  lineStart: LayoutCursor,
+  lineEnd: LayoutCursor,
+): number | null {
+  const internal = getInternalPrepared(prepared)
+  lineEnd.segmentIndex = start.segmentIndex
+  lineEnd.graphemeIndex = start.graphemeIndex
+  const chunkIndex = normalizePreparedLineStart(internal, lineEnd)
+  if (chunkIndex < 0) return null
+
+  lineStart.segmentIndex = lineEnd.segmentIndex
+  lineStart.graphemeIndex = lineEnd.graphemeIndex
+  const width = stepPreparedLineGeometryFromChunk(internal, lineEnd, chunkIndex, maxWidth)
+  return width === null ? null : Math.max(0, width)
 }
 
 export function layoutNextLine(
@@ -963,28 +935,20 @@ export function layoutNextLine(
   start: LayoutCursor,
   maxWidth: number,
 ): LayoutLine | null {
-  const internal = getInternalPrepared(prepared)
-  const end = {
-    segmentIndex: start.segmentIndex,
-    graphemeIndex: start.graphemeIndex,
-  }
-  const chunkIndex = normalizePreparedLineStart(internal, end)
-  if (chunkIndex < 0) return null
-
-  const lineStartSegmentIndex = end.segmentIndex
-  const lineStartGraphemeIndex = end.graphemeIndex
-  const width = stepPreparedLineGeometryFromChunk(internal, end, chunkIndex, maxWidth)
+  const lineStart = { segmentIndex: 0, graphemeIndex: 0 }
+  const end = { segmentIndex: 0, graphemeIndex: 0 }
+  const width = stepNextLine(prepared, start, maxWidth, lineStart, end)
   if (width === null) return null
 
-  return createLayoutLine(
+  const text = buildLineTextFromRange(
     prepared,
     getLineTextCache(prepared),
-    width,
-    lineStartSegmentIndex,
-    lineStartGraphemeIndex,
+    lineStart.segmentIndex,
+    lineStart.graphemeIndex,
     end.segmentIndex,
     end.graphemeIndex,
   )
+  return { text, width, start: lineStart, end }
 }
 
 export function layoutNextLineRange(
@@ -992,26 +956,10 @@ export function layoutNextLineRange(
   start: LayoutCursor,
   maxWidth: number,
 ): LayoutLineRange | null {
-  const internal = getInternalPrepared(prepared)
-  const end = {
-    segmentIndex: start.segmentIndex,
-    graphemeIndex: start.graphemeIndex,
-  }
-  const chunkIndex = normalizePreparedLineStart(internal, end)
-  if (chunkIndex < 0) return null
-
-  const lineStartSegmentIndex = end.segmentIndex
-  const lineStartGraphemeIndex = end.graphemeIndex
-  const width = stepPreparedLineGeometryFromChunk(internal, end, chunkIndex, maxWidth)
-  if (width === null) return null
-
-  return createLayoutLineRange(
-    width,
-    lineStartSegmentIndex,
-    lineStartGraphemeIndex,
-    end.segmentIndex,
-    end.graphemeIndex,
-  )
+  const lineStart = { segmentIndex: 0, graphemeIndex: 0 }
+  const end = { segmentIndex: 0, graphemeIndex: 0 }
+  const width = stepNextLine(prepared, start, maxWidth, lineStart, end)
+  return width === null ? null : { width, start: lineStart, end }
 }
 
 // Rich layout API for callers that want the actual line contents and widths.
@@ -1044,7 +992,6 @@ export function layoutWithLines(prepared: PreparedTextWithSegments, maxWidth: nu
 
 export function clearCache(): void {
   clearAnalysisCaches()
-  clearLineTextCaches()
   clearMeasurementCaches()
 }
 

@@ -245,7 +245,7 @@ const letterOrNumberAtRe = /[\p{L}\p{N}]/uy
 function endsWithKeepAllLetter(text: string, profile: AnalysisProfile): boolean {
   const last = getLastCodePoint(text)
   if (last === null || !letterOrNumberRe.test(last)) return false
-  return profile.keepAllPairModel !== 'icu4x-classes' || !cjkNonstarters.has(last)
+  return profile.keepAllPairModel !== 'icu4x-classes' || getCJKLineStartClass(last) !== LineBreakClass.NS
 }
 
 // Ideographs, kana and Hangul syllables, which every keep-all pair model keeps.
@@ -500,29 +500,18 @@ function getKeepAllRunEnd(text: string, boundary: number, previousText: string, 
   return endsKeepAllRunAtPair(text, boundary, profile) ? 'split' : null
 }
 
-// UAX #14 NS code points in the CJK ranges above.
-const cjkNonstarters = new Set([
-  '\u3005', '\u301C', '\u303B', '\u303C', '\u309B', '\u309C', '\u309D', '\u309E',
-  '\u30A0', '\u30FB', '\u30FD', '\u30FE', '\uFF1A', '\uFF1B', '\uFF65', '\uFF9E',
-  '\uFF9F',
-])
-
-// Code points in the CJK ranges above that cannot start a line after other
-// text, by UAX #14 class (LineBreak.txt, Unicode 17). These ranges hold no CP,
-// IS, SY or IN code points. U+3000 is BA but a space that engines hang or trim
-// at a line end, so it is not listed.
-const cjkLineStartProhibited = new Set([
-  // CL (LB13)
-  '\u3001', '\u3002', '\u3009', '\u300B', '\u300D', '\u300F', '\u3011', '\u3015',
-  '\u3017', '\u3019', '\u301B', '\u301E', '\u301F', '\uFF09', '\uFF0C', '\uFF0E',
-  '\uFF3D', '\uFF5D', '\uFF60', '\uFF61', '\uFF63', '\uFF64',
-  // EX (LB13)
-  '\uFF01', '\uFF1F',
-  // NS (LB21)
-  ...cjkNonstarters,
-  // CM that does not extend a grapheme (LB9)
-  '\u3035',
-])
+// In Unicode 17, Pretext's CJK ranges above hold no CP, IS, SY or IN code
+// points, and U+3000 is their only BA: a space that engines hang or trim at a
+// line end, which needs its own model. So by UAX #14 class, the code points in
+// them that cannot start a line after other text are CL and EX (LB13), NS (LB21)
+// and the CM U+3035, which does not extend a grapheme (LB9). Each of those CL, EX
+// and NS code points is one code unit in U+3000-U+30FF or U+FF00-U+FFEF. Returns
+// the class of a one-code-unit text in those blocks, or -1.
+function getCJKLineStartClass(text: string): number {
+  if (text.length !== 1) return -1
+  const code = text.charCodeAt(0)
+  return (code >= 0x3000 && code <= 0x30FF) || (code >= 0xFF00 && code <= 0xFFEF) ? getLineBreakClass(code) : -1
+}
 
 // Small kana and U+30FC are UAX #14 CJ, which the profile resolves: ID may start
 // a line and NS may not.
@@ -532,7 +521,9 @@ function keepsConditionalJapaneseStarter(text: string, profile: AnalysisProfile)
 
 // Whether a grapheme or a code point cannot start a line after CJK text.
 function prohibitsCJKLineStart(text: string, profile: AnalysisProfile): boolean {
-  return cjkLineStartProhibited.has(text) || keepsConditionalJapaneseStarter(text, profile)
+  const lineBreakClass = getCJKLineStartClass(text)
+  return lineBreakClass === LineBreakClass.CL || lineBreakClass === LineBreakClass.EX || lineBreakClass === LineBreakClass.NS ||
+    text === '\u3035' || keepsConditionalJapaneseStarter(text, profile)
 }
 
 export const kinsokuEnd = new Set([
@@ -808,9 +799,10 @@ function isBasicCombiningMark(code: number): boolean {
   )
 }
 
-// UAX #14 BK, CR, LF and NL. LB7 forbids every other break before a ZWSP.
+// UAX #14 BK, CR, LF and NL, which the class table reads as BK. LB7 forbids every
+// other break before a ZWSP.
 function isMandatoryBreakCode(code: number): boolean {
-  return (code >= 0x0A && code <= 0x0D) || code === 0x85 || code === 0x2028 || code === 0x2029
+  return getLineBreakClass(code) === LineBreakClass.BK
 }
 
 // WebKit reports ZWSP|mark (LB8) only from an ICU lookup that starts before the
@@ -1223,16 +1215,13 @@ function breaksAfterExclamation(
 const hyphenWithMarksRe = /^.\p{M}+$/u
 const letterAtRe = /\p{L}/uy
 
-// A hyphen alone or followed only by combining marks. The astral HH dashes are
-// two code units.
+// A hyphen (UAX #14 HY or HH) alone or followed only by combining marks. The
+// astral HH dashes are two code units.
 function isHyphenPiece(text: string): boolean {
   const code = text.codePointAt(0)!
-  switch (code) {
-    case 0x2D: case 0x058A: case 0x05BE: case 0x1400: case 0x2010: case 0x2012:
-    case 0x2013: case 0x2E17: case 0x2E40: case 0x2E5D: case 0x10D6E: case 0x10EAD:
-      return text.length === (code > 0xFFFF ? 2 : 1) || hyphenWithMarksRe.test(text)
-  }
-  return false
+  const lineBreakClass = getLineBreakClass(code)
+  return (lineBreakClass === LineBreakClass.HY || lineBreakClass === LineBreakClass.HH) &&
+    (text.length === (code > 0xFFFF ? 2 : 1) || hyphenWithMarksRe.test(text))
 }
 
 // UAX #14 LB20a keeps a hyphen (HY or HH) after a space, ZWSP, hard break or
