@@ -484,11 +484,18 @@ async function initializeFirefoxSession(options: BrowserSessionOptions): Promise
 function createSafariSession(options: BrowserSessionOptions): BrowserSession {
   // Safari exposes no stable tab ID. Own a dedicated single-tab window and
   // verify its URL before using it; a changed selection must not redirect us.
+  // Without activation Safari can open the window behind the user's windows,
+  // so find it by its unique URL rather than as the front window.
   const initialUrl = `about:blank#pretext-automation-${randomUUID()}`
   const scriptLines = ['tell application "Safari"']
   if (options.foreground === true) scriptLines.push('activate')
-  scriptLines.push(`make new document with properties {URL:${JSON.stringify(initialUrl)}}`)
-  scriptLines.push('return id of front window as string', 'end tell')
+  scriptLines.push(
+    `make new document with properties {URL:${JSON.stringify(initialUrl)}}`,
+    'repeat with targetWindow in windows',
+    `if (count of tabs of targetWindow) is 1 and URL of tab 1 of targetWindow is ${JSON.stringify(initialUrl)} then return id of targetWindow as string`,
+    'end repeat',
+    'end tell',
+  )
   const windowIdRaw = options.foreground === true ? runAppleScript(scriptLines) : runBackgroundAppleScript(scriptLines)
   const windowId = Number.parseInt(windowIdRaw, 10)
   if (!Number.isFinite(windowId)) throw new Error(`Failed to create Safari automation window: ${windowIdRaw}`)
